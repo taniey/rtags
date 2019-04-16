@@ -38,13 +38,13 @@ function build_and_test()
     emacs --version
     cmake "$1" "${CMAKE_PARAMS[@]}" .. || cat CMakeFiles/CMakeError.log
     make VERBOSE=1 -j2
-    PATH=$(pwd)/bin:$PATH ctest --output-on-failure --verbose $@
+    PATH=$(pwd)/bin:$PATH ctest --output-on-failure --verbose "$@"
     popd >/dev/null
 }
 
 function add_cmake_params()
 {
-    for param in $@; do
+    for param in "$@"; do
         CMAKE_PARAMS[${#CMAKE_PARAMS[@]}]="$param"
     done
 }
