@@ -1,6 +1,6 @@
 language: cpp
 before_cache:
-  - test -x `which brew` && brew cleanup
+  - test -x $(which brew) && brew cleanup
   - rm -f $HOME/.cache/pip/log/debug.log
 
 cache:
@@ -35,6 +35,7 @@ jobs:
             - python3-pip
             - libcppunit-dev
     - os: osx
+      before_script: PATH=/usr/local/opt/ccache/libexec:$PATH
       script: ./scripts/travis.sh
       compiler: clang
       env: T=clang-osx
@@ -44,6 +45,7 @@ jobs:
             - llvm
             - yarn
             - cppunit
+            - ccache
     - stage: Release
       before_deploy: ./scripts/rtags-release.sh
       script: true
