@@ -29,7 +29,7 @@ this project but he assured us clang was the way to go. The name stuck though.
 Build RTags
 
 #+BEGIN_SRC sh
-git clone --recursive https://github.com/Andersbakken/rtags.git
+git clone --recursive https://github.com/taniey/rtags.git
 cd rtags
 cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 .
 make
