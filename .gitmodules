@@ -2,3 +2,6 @@
         path = src/rct
         url = https://github.com/Andersbakken/rct
         branch = master
+[submodule "src/mman"]
+	path = src/mman
+	url = https://github.com/taniey/mman.git
