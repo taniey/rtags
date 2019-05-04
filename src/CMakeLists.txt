@@ -188,6 +188,10 @@ set(RTAGS_SOURCES
     Token.cpp
     TokensJob.cpp)
 
+if (CYGWIN)
+    list(APPEND RCT_SOURCES mman/mman.cpp)
+endif()
+
 add_library(rtags STATIC ${RTAGS_SOURCES})
 if (RTAGS_BUILD_CLANG)
     add_dependencies(rtags llvmclang)

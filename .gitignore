@@ -57,3 +57,6 @@ compile_commands.json
 /testfile.txt
 /empty.txt
 /src/CTestTestfile.cmake
+GTAGS
+GPATH
+GRTAGS

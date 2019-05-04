@@ -19,7 +19,14 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <sys/file.h>
+// #include <sys/mman.h>
+#ifdef __MINGW32__
+#include <windows.h>
+#include "mman/mman.h"
+#else
 #include <sys/mman.h>
+#endif
+
 #include <sys/stat.h>
 #include <functional>
 #include <limits>
@@ -309,6 +316,37 @@ public:
         return ok ? data.size() : 0;
     }
 private:
+#ifdef _WIN32
+    enum Mode {
+        Read = 0,
+        Write = LOCKFILE_EXCLUSIVE_LOCK,
+        Unlock = -1,
+    };
+    static bool lock(int fd, Mode mode)
+    {
+        BOOL bLckRes;
+        OVERLAPPED olp;
+        memset(&olp, 0, sizeof(olp));
+        HANDLE hFile = (HANDLE)_get_osfhandle(fd);
+        if (Unlock != mode) {
+            do{
+                bLckRes = LockFileEx(hFile, mode, 0, 0, 0, &olp);
+                // if (!bLckRes) {
+                //     int nErrNo = GetLastError();
+                // }
+            }while(!bLckRes);
+        }
+        else {
+            do{
+                bLckRes = UnlockFileEx(hFile, 0, 0, 0, &olp);
+                // if (!bLckRes) {
+                //     int nErrNo = GetLastError();
+                // }
+            }while(!bLckRes);
+        }
+        return bLckRes;
+    }
+#else
     enum Mode {
         Read = F_RDLCK,
         Write = F_WRLCK,
@@ -325,6 +363,7 @@ private:
         eintrwrap(ret, fcntl(fd, F_SETLKW, &fl));
         return ret != -1;
     }
+#endif // !WIN32
     const char *valuesSegment() const { return mPointer + mValuesOffset; }
     const char *keysSegment() const { return mPointer + (sizeof(uint32_t) * 2); }
 
