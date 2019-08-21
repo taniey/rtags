@@ -91,10 +91,10 @@ static const List<Path> sSystemIncludePaths = {
 };
 #endif
 
-Server *Server::sInstance = 0;
+Server *Server::sInstance = nullptr;
 Server::Server()
     : mSuspended(false), mEnvironment(Rct::environment()), mPollTimer(-1), mExitCode(0),
-      mLastFileId(0), mCompletionThread(0), mActiveBuffersSet(false)
+      mLastFileId(0), mCompletionThread(nullptr), mActiveBuffersSet(false)
 {
     assert(!sInstance);
     sInstance = this;
@@ -109,13 +109,13 @@ Server::~Server()
         mCompletionThread->stop();
         mCompletionThread->join();
         delete mCompletionThread;
-        mCompletionThread = 0;
+        mCompletionThread = nullptr;
     }
 
     stopServers();
     mProjects.clear(); // need to be destroyed before sInstance is set to 0
     assert(sInstance == this);
-    sInstance = 0;
+    sInstance = nullptr;
     Message::cleanup();
 }
 
@@ -158,7 +158,7 @@ bool Server::init(const Options &options)
             "__builtin_ia32_xsaveopt",
             "__builtin_ia32_xsaveopt64",
             "__builtin_ia32_sbb_u32",
-            0
+            nullptr
         };
         for (int i=0; gccBuiltIntVectorFunctionDefines[i]; ++i) {
             mOptions.defines << Source::Define(String::format<128>("%s(...)", gccBuiltIntVectorFunctionDefines[i]));
@@ -186,6 +186,7 @@ bool Server::init(const Options &options)
         return false;
     }
 
+    mDefaultJobCount = options.jobCount;
     {
         Log l(LogLevel::Error, LogOutput::StdOut|LogOutput::TrailingNewLine);
         l << "Running with" << mOptions.jobCount << "jobs, using args:"
@@ -202,7 +203,10 @@ bool Server::init(const Options &options)
     }
 
     mJobScheduler.reset(new JobScheduler);
-    mJobScheduler->setActiveJobs(mOptions.jobCount);
+    if (!mJobScheduler->start()) {
+        error() << "Failed to start job scheduler";
+        return false;
+    }
 
     if (!load())
         return false;
@@ -289,7 +293,7 @@ bool Server::initServers()
 #endif
 
     char *listenFds = getenv("LISTEN_FDS");
-    if (listenFds != NULL) {
+    if (listenFds != nullptr) {
         auto numFDs = atoi(listenFds);
         if (numFDs != 1) {
             error("Unexpected number of sockets from systemd: %d", numFDs);
@@ -338,6 +342,8 @@ std::shared_ptr<Project> Server::addProject(const Path &path)
         project.reset(new Project(path));
         if (!project->init()) {
             Path::rmdir(project->projectDataDir());
+            mProjects.erase(path);
+            return std::shared_ptr<Project>();
         }
     }
     return project;
@@ -1667,23 +1673,38 @@ void Server::project(const std::shared_ptr<QueryMessage> &query, const std::shar
 
 void Server::jobCount(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn)
 {
+    enum { MaxJobCount = 512 };
     String q = query->query();
     if (q.isEmpty()) {
         conn->write<128>("Running with %zu jobs", mOptions.jobCount);
     } else {
-        int jobCount;
-        bool ok;
+        int jobCount = -1;
+        bool ok = false;
         if (q == "default") {
             ok = true;
-            jobCount = std::max(2, ThreadPool::idealThreadCount());
+            jobCount = mDefaultJobCount;
+        } else if (q == "pop") {
+            if (mJobCountStack.isEmpty()) {
+                conn->write<128>("Job count stack is empty");
+            } else {
+                jobCount = mJobCountStack.back();
+                mJobCountStack.pop_back();
+                ok = true;
+            }
+        } else if (q.startsWith("push:")) {
+            jobCount = q.mid(5).toLongLong(&ok);
+            if (ok && jobCount > 0 && jobCount < MaxJobCount) {
+                mJobCountStack.append(mOptions.jobCount);
+            };
         } else {
             jobCount = q.toLongLong(&ok);
         }
-        if (!ok || jobCount < 0 || jobCount > 100) {
+        if (!ok || jobCount < 0 || jobCount > MaxJobCount) {
             conn->write<128>("Invalid job count %s (%d)", query->query().constData(), jobCount);
         } else {
             mOptions.jobCount = jobCount;
             conn->write<128>("Changed jobs to %zu", mOptions.jobCount);
+            mJobScheduler->startJobs();
         }
     }
     conn->finish();
@@ -2132,7 +2153,7 @@ void Server::handleVisitFileMessage(const std::shared_ptr<VisitFileMessage> &mes
     if (project && project->isActiveJob(id)) {
         assert(message->file() == message->file().resolved());
         fileId = Location::insertFile(message->file());
-        visit = project->visitFile(fileId, message->file(), id);
+        visit = project->visitFile(fileId, id);
     }
     VisitFileResponseMessage msg(fileId, visit);
     conn->send(msg);
@@ -2593,7 +2614,6 @@ void Server::sourceFileModified(const std::shared_ptr<Project> &project, uint32_
     // error() << Location::path(fileId) << "modified" << (mCompletionThread ? (mCompletionThread->isCached(project, fileId) ? 1 : 0) : -1);
     if (mCompletionThread && mCompletionThread->isCached(project, fileId)) {
         mCompletionThread->reparse(project, fileId);
-
     }
 }
 

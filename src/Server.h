@@ -87,8 +87,7 @@ public:
         Separate32BitAnd64Bit = (1ull << 31),
         SourceIgnoreIncludePathDifferencesInUsr = (1ull << 32),
         NoLibClangIncludePath = (1ull << 33),
-        CompletionDiagnostics = (1ull << 34),
-        RPDaemon = (1ull << 35)
+        CompletionDiagnostics = (1ull << 34)
     };
     struct Options {
         Options()
@@ -97,7 +96,7 @@ public:
               rpConnectAttempts(0), rpNiceValue(0), maxCrashCount(0),
               completionCacheSize(0), testTimeout(60 * 1000 * 5),
               maxFileMapScopeCacheSize(512), pollTimer(0), maxSocketWriteBufferSize(0),
-              tcpPort(0)
+              daemonCount(0), tcpPort(0)
         {
         }
 
@@ -107,7 +106,7 @@ public:
         int rpVisitFileTimeout, rpIndexDataMessageTimeout,
             rpConnectTimeout, rpConnectAttempts, rpNiceValue, maxCrashCount,
             completionCacheSize, testTimeout, maxFileMapScopeCacheSize, errorLimit,
-            pollTimer, maxSocketWriteBufferSize;
+            pollTimer, maxSocketWriteBufferSize, daemonCount;
         uint16_t tcpPort;
         List<String> defaultArguments, excludeFilters;
         Set<String> blockedArguments;
@@ -157,7 +156,7 @@ public:
                String &&arguments,
                const Path &pwd,
                uint32_t compileCommandsFileId = 0,
-               SourceCache *cache = 0) const;
+               SourceCache *cache = nullptr) const;
     enum FileIdsFileFlag {
         None = 0x0,
         HasSandboxRoot = 0x1,
@@ -252,6 +251,8 @@ private:
     Set<std::shared_ptr<Connection> > mConnections;
 
     Signal<std::function<void()> > mIndexDataMessageReceived;
+    size_t mDefaultJobCount { 0 };
+    List<size_t> mJobCountStack;
 };
 RCT_FLAGS(Server::Option);
 RCT_FLAGS(Server::FileIdsFileFlag);

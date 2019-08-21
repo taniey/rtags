@@ -39,7 +39,7 @@ static uint64_t start = 0;
                                       Rct::currentTimeString().constData())
 
 CompletionThread::CompletionThread(int cacheSize)
-    : mShutdown(false), mCacheSize(cacheSize), mDump(0)
+    : mShutdown(false), mCacheSize(cacheSize), mDump(nullptr)
 {
 }
 
@@ -51,8 +51,8 @@ CompletionThread::~CompletionThread()
 void CompletionThread::run()
 {
     while (true) {
-        Request *request = 0;
-        Dump *dump = 0;
+        Request *request = nullptr;
+        Dump *dump = nullptr;
         {
             std::unique_lock<std::mutex> lock(mMutex);
             while (!mShutdown && mPending.isEmpty() && !mDump) {
@@ -67,7 +67,7 @@ void CompletionThread::run()
                     std::unique_lock<std::mutex> dumpLock(mDump->mutex);
                     mDump->done = true;
                     mDump->cond.notify_one();
-                    mDump = 0;
+                    mDump = nullptr;
                 }
                 break;
             } else if (mDump) {
@@ -202,7 +202,7 @@ void CompletionThread::process(Request *request)
               << cache->source << "vs" << request->source;
         mCacheList.remove(cache);
         delete cache;
-        cache = 0;
+        cache = nullptr;
     }
     if (!cache) {
         cache = new SourceFile;
@@ -229,11 +229,7 @@ void CompletionThread::process(Request *request)
     List<CXUnsavedFile> unsavedFiles;
     unsavedFiles.reserve(request->unsavedFiles.size());
     for (const auto &it : request->unsavedFiles) {
-        unsavedFiles.push_back({
-            it.first.constData(),
-            it.second.constData(),
-            static_cast<unsigned long>(it.second.size())
-        });
+        unsavedFiles.push_back({ it.first.constData(), it.second.constData(), static_cast<unsigned long>(it.second.size()) });
     }
 
     const auto &options = Server::instance()->options();
@@ -308,7 +304,7 @@ void CompletionThread::process(Request *request)
         LOG() << "Warmed up unit" << cache->source.sourceFile();
         return;
     } else if (request->flags & Diagnose) {
-        processDiagnostics(request, 0, cache->translationUnit->unit);
+        processDiagnostics(request, nullptr, cache->translationUnit->unit);
         return;
     }
 
@@ -317,11 +313,11 @@ void CompletionThread::process(Request *request)
     if (request->flags & IncludeMacros)
         completionFlags |= CXCodeComplete_IncludeMacros;
 
-    CXCodeCompleteResults *results = clang_codeCompleteAt(cache->translationUnit->unit, sourceFile.constData(),
+    CXCodeCompleteResults *results = clang_codeCompleteAt(cache->translationUnit->unit, request->location.path().c_str(),
                                                           request->location.line(), request->location.column(),
                                                           unsavedFiles.data(), static_cast<unsigned int>(unsavedFiles.size()), completionFlags);
     completeTime = cache->codeCompleteTime = sw.restart();
-    LOG() << "Generated" << (results ? results->NumResults : 0) << "completions for" << request->location << (results ? "successfully" : "unsuccessfully") << "in" << completeTime << "ms";
+    LOG() << "Generated" << (results ? results->NumResults : 0) << "completions for" << request->location << "from" << sourceFile << (results ? "successfully" : "unsuccessfully") << "in" << completeTime << "ms";
 
     ++cache->completions;
     if (results) {
@@ -362,22 +358,16 @@ void CompletionThread::process(Request *request)
             const int priority = clang_getCompletionPriority(string);
 
             CompletionCandidate *candidate = new CompletionCandidate;
-            candidate->kind = RTags::eatString(clang_getCursorKindSpelling(kind));
-            candidate->priority = priority;
-            candidate->parent = RTags::eatString(clang_getCompletionParent(string, 0));
-            candidate->brief_comment = RTags::eatString(clang_getCompletionBriefComment(string));
 
-            candidates.push_back(candidate);
-
-            bool ok = true;
             const int chunkCount = clang_getNumCompletionChunks(string);
             for (int j=0; j<chunkCount; ++j) {
                 const CXCompletionChunkKind chunkKind = clang_getCompletionChunkKind(string, j);
                 String text = RTags::eatString(clang_getCompletionChunkText(string, j));
                 if (chunkKind == CXCompletionChunk_TypedText) {
                     candidate->name = text;
-                    if (candidate->name.isEmpty()) {
-                        ok = false;
+                    if (candidate->name.isEmpty() || (candidate->name == "RTAGS" && kind == CXCursor_MacroDefinition)) {
+                        delete candidate;
+                        candidate = nullptr;
                         break;
                     }
                     candidate->signature += candidate->name;
@@ -387,8 +377,12 @@ void CompletionThread::process(Request *request)
                         candidate->signature += ' ';
                 }
             }
-
-            if (ok) {
+            if (candidate) {
+                candidate->kind = RTags::eatString(clang_getCursorKindSpelling(kind));
+                candidate->priority = priority;
+                candidate->parent = RTags::eatString(clang_getCompletionParent(string, nullptr));
+                candidate->brief_comment = RTags::eatString(clang_getCompletionBriefComment(string));
+                candidates.push_back(candidate);
                 const unsigned int annotations = clang_getCompletionNumAnnotations(string);
                 for (unsigned j=0; j<annotations; ++j) {
                     const CXStringScope annotation = clang_getCompletionAnnotation(string, j);
@@ -742,7 +736,7 @@ public:
     {
         return clang_getDiagnostic(mUnit, idx);
     }
-    virtual Location createLocation(const Path &file, unsigned int line, unsigned int col, bool *blocked = 0) override
+    virtual Location createLocation(const Path &file, unsigned int line, unsigned int col, bool *blocked = nullptr) override
     {
         if (blocked)
             *blocked = false;
@@ -788,7 +782,7 @@ public:
         return clang_codeCompleteGetDiagnostic(mResults, idx);
     }
 
-    virtual Location createLocation(const Path &file, unsigned int line, unsigned int col, bool *blocked = 0) override
+    virtual Location createLocation(const Path &file, unsigned int line, unsigned int col, bool *blocked = nullptr) override
     {
         if (blocked)
             *blocked = false;

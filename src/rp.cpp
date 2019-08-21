@@ -58,8 +58,8 @@ public:
 
 int main(int argc, char **argv)
 {
-    setvbuf(stdout, NULL, _IONBF, 0);
-    setvbuf(stderr, NULL, _IONBF, 0);
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
     LogLevel logLevel = LogLevel::Error;
     Path file;
     bool logToSyslog = false;
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
     RTags::initMessages();
     auto eventLoop = std::make_shared<EventLoop>();
     eventLoop->init(EventLoop::MainEventLoop);
-    ClangIndexer indexer;
+    ClangIndexer indexer(daemon ? ClangIndexer::Daemon : ClangIndexer::Normal);
     while (true) {
         String data;
 

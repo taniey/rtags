@@ -5,7 +5,7 @@
 ;; Author: Jan Erik Hanssen <jhanssen@gmail.com>
 ;;         Anders Bakken <agbakken@gmail.com>
 ;; URL: http://rtags.net
-;; Version: 2.31
+;; Version: 2.33.128
 
 ;; This file is not part of GNU Emacs.
 
@@ -74,7 +74,7 @@
 ;; Constants
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defconst rtags-protocol-version 128)
-(defconst rtags-package-version "2.31")
+(defconst rtags-package-version "2.33")
 (defconst rtags-popup-available (require 'popup nil t))
 (defconst rtags-supported-major-modes '(c-mode c++-mode objc-mode) "Major modes RTags supports.")
 (defconst rtags-verbose-results-delimiter "------------------------------------------")
@@ -757,7 +757,7 @@ of the package `multiple-cursors', if it is installed."
       (let ((suffix (and (string-match "\.\\([^.]+\\)$" filename) (match-string 1 filename))))
         (or (not suffix)
             (and (member (downcase suffix)
-                         (list "cpp" "h" "cc" "c" "cp" "cxx" "m" "mm" "tcc" "txx" "moc" "hxx" "hh" "hpp" "inc"))
+                         (list "cpp" "h" "cc" "c" "cp" "cxx" "m" "mm" "tcc" "txx" "moc" "hxx" "hh" "hpp" "inc" "tpp"))
                  t))))))
 
 (defun rtags-get-buffer (&optional name)
