@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #include "RClient.h"
 
@@ -147,6 +147,7 @@ std::initializer_list<CommandLineParser::Option<RClient::OptionType> > opts = {
     { RClient::SymbolInfoIncludeTargets, "symbol-info-include-targets", 0, CommandLineParser::NoValue, "Use to make --symbol-info include target symbols." },
     { RClient::SymbolInfoIncludeReferences, "symbol-info-include-references", 0, CommandLineParser::NoValue, "Use to make --symbol-info include reference symbols." },
     { RClient::SymbolInfoIncludeBaseClasses, "symbol-info-include-base-classes", 0, CommandLineParser::NoValue, "Use to make --symbol-info include baseclasses' symbols." },
+    { RClient::SymbolInfoIncludeSourceCode, "symbol-info-include-source-code", 0, CommandLineParser::NoValue, "Use to make --symbol-info include source code." },
     { RClient::CursorKind, "cursor-kind", 0, CommandLineParser::NoValue, "Include cursor kind in --find-symbols output." },
     { RClient::DisplayName, "display-name", 0, CommandLineParser::NoValue, "Include display name in --find-symbols output." },
     { RClient::CurrentFile, "current-file", 0, CommandLineParser::Required, "Pass along which file is being edited to give rdm a better chance at picking the right project." },
@@ -366,7 +367,7 @@ void RClient::exec()
 {
     RTags::initMessages();
     OnDestruction onDestruction([]() { Message::cleanup(); });
-    EventLoop::SharedPtr loop(new EventLoop);
+    std::shared_ptr<EventLoop> loop(new EventLoop);
     loop->init(EventLoop::MainEventLoop);
 
     const int commandCount = mCommands.size();
@@ -540,6 +541,9 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
         case SymbolInfoIncludeBaseClasses: {
             mQueryFlags |= QueryMessage::SymbolInfoIncludeBaseClasses;
             break; }
+        case SymbolInfoIncludeSourceCode: {
+            mQueryFlags |= QueryMessage::SymbolInfoIncludeSourceCode;
+            break; }
         case CursorKind: {
             mQueryFlags |= QueryMessage::CursorKind;
             break; }
@@ -652,7 +656,7 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
                 return { String::format<1024>("Can't resolve argument %s", value.constData()), CommandLineParser::Parse_Error };
             }
 
-            addQuery(QueryMessage::CodeCompleteAt, std::move(encoded));
+            addQuery(QueryMessage::CodeCompleteAt, std::move(encoded), QueryMessage::HasLocation);
             break; }
         case Silent: {
             mLogLevel = LogLevel::None;
@@ -884,7 +888,6 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
         case IncludeFile:
         case JobCount:
         case Status: {
-            Flags<QueryMessage::Flag> extraQueryFlags;
             QueryMessage::Type queryType = QueryMessage::Invalid;
             bool resolve = true;
             switch (type) {
@@ -938,12 +941,12 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
                 Path p(arg);
                 if (resolve && p.exists()) {
                     p.resolve();
-                    addQuery(queryType, std::move(p), extraQueryFlags);
+                    addQuery(queryType, std::move(p), QueryMessage::HasLocation);
                 } else {
-                    addQuery(queryType, std::move(arg), extraQueryFlags);
+                    addQuery(queryType, std::move(arg));
                 }
             } else {
-                addQuery(queryType, String(), extraQueryFlags);
+                addQuery(queryType, String());
             }
             assert(!mCommands.isEmpty());
             if (queryType == QueryMessage::Project)
@@ -1073,7 +1076,7 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
             }
             if (p.isDir() && !p.endsWith('/'))
                 p.append('/');
-            addQuery(QueryMessage::HasFileManager, std::move(p));
+            addQuery(QueryMessage::HasFileManager, std::move(p), QueryMessage::HasMatch);
             break; }
         case ProjectRoot: {
             Path p = std::move(value);
@@ -1181,9 +1184,11 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
                     p.append('/');
                 }
             }
-            if (!p.isEmpty())
-                p.resolve();
             Flags<QueryMessage::Flag> extraQueryFlags;
+            if (!p.isEmpty()) {
+                p.resolve();
+                extraQueryFlags |= QueryMessage::HasMatch;
+            }
             QueryMessage::Type queryType = QueryMessage::Invalid;
             switch (type) {
             case GenerateTest:
@@ -1278,7 +1283,7 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
             if (!p.isFile()) {
                 return { String::format<1024>("%s is not a file", p.constData()), CommandLineParser::Parse_Error };
             }
-            addQuery(QueryMessage::PreprocessFile, std::move(p));
+            addQuery(QueryMessage::PreprocessFile, std::move(p), QueryMessage::HasMatch);
             break; }
         case AsmFile: {
             Path p = std::move(value);
@@ -1286,14 +1291,14 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
             if (!p.isFile()) {
                 return { String::format<1024>("%s is not a file", p.constData()), CommandLineParser::Parse_Error };
             }
-            addQuery(QueryMessage::AsmFile, std::move(p));
+            addQuery(QueryMessage::AsmFile, std::move(p), QueryMessage::HasMatch);
             break; }
         case RemoveFile: {
             Path p = Path::resolved(value, Path::MakeAbsolute);
             if (!p.exists()) {
-                addQuery(QueryMessage::RemoveFile, std::move(p));
+                addQuery(QueryMessage::RemoveFile, std::move(p), QueryMessage::HasMatch);
             } else {
-                addQuery(QueryMessage::RemoveFile, std::move(value));
+                addQuery(QueryMessage::RemoveFile, std::move(value), QueryMessage::HasMatch);
             }
             break; }
         case ReferenceName: {
@@ -1305,7 +1310,7 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
                 return { String::format<1024>("include path can't resolve argument %s", value.constData()), CommandLineParser::Parse_Error };
             }
 
-            addQuery(QueryMessage::IncludePath, std::move(encoded));
+            addQuery(QueryMessage::IncludePath, std::move(encoded), QueryMessage::HasLocation);
             break; }
         case MaxDepth: {
             const int depth = atoi(value.constData());

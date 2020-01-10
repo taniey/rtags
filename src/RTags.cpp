@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #include "RTags.h"
 
@@ -283,7 +283,6 @@ static inline Path checkEntries(const Entry *entries, const Path &path, const Pa
     return best;
 }
 
-
 Path findProjectRoot(const Path &path, ProjectRootMode mode, SourceCache *cache)
 {
     if (path == "-")
@@ -443,6 +442,23 @@ Path findProjectRoot(const Path &path, ProjectRootMode mode, SourceCache *cache)
         return findProjectRoot(path, SourceRoot, cache);
 
     return Path();
+}
+
+size_t findOffset(int line, int col, const String &contents, size_t offset)
+{
+    // ### this does not handle multibyte
+    String ret;
+    unsigned int l = line;
+    if (!l)
+        return String::npos;
+    const char *ch = contents.constData() + offset;
+    while (--l) {
+        ch = strchr(ch, '\n');
+        if (!ch)
+            return String::npos;
+        ++ch;
+    }
+    return (ch - contents.constData()) + col - 1;
 }
 
 void initMessages()
@@ -791,6 +807,7 @@ void DiagnosticsProvider::diagnose()
             {
                 Flags<Diagnostic::Flag> f = Diagnostic::DisplayCategory;
                 if (!(fileFlags & IndexDataMessage::Visited)) {
+#if CINDEX_VERSION >= CINDEX_VERSION_ENCODE(0, 21)
                     CXCursor cursor = cursorAt(u, diagLoc);
                     bool found = false;
                     do {
@@ -808,6 +825,9 @@ void DiagnosticsProvider::diagnose()
                         clang_disposeDiagnostic(diag);
                         continue;
                     }
+#else
+                    continue;
+#endif
                 }
                 process(u, diag, indexData.diagnostics(), f);
             }
@@ -1092,41 +1112,7 @@ String typeName(const CXCursor &cursor)
 
 String typeString(const CXType &type)
 {
-    String ret;
-    if (clang_isConstQualifiedType(type))
-        ret = "const ";
-
-    const char *builtIn = builtinTypeName(type.kind);
-    if (builtIn) {
-        ret += builtIn;
-        return ret;
-    }
-
-    if (char pointer = (type.kind == CXType_Pointer ? '*' : (type.kind == CXType_LValueReference ? '&' : 0))) {
-        const CXType pointee = clang_getPointeeType(type);
-        ret += typeString(pointee);
-        if (ret.endsWith('*') || ret.endsWith('&')) {
-            ret += pointer;
-        } else {
-            ret += ' ';
-            ret += pointer;
-        }
-        return ret;
-    }
-
-    if (type.kind == CXType_ConstantArray) {
-        ret += typeString(clang_getArrayElementType(type));
-        const int64_t count = clang_getNumElements(type);
-        ret += '[';
-        if (count >= 0)
-            ret += String::number(count);
-        ret += ']';
-        return ret;
-    }
-    ret += typeName(clang_getTypeDeclaration(type));
-    if (ret.endsWith(' '))
-        ret.chop(1);
-    return ret;
+    return eatString(clang_getTypeSpelling(type));
 }
 
 #define OUTPUT_LITERAL(string)                  \
@@ -1137,7 +1123,7 @@ String typeString(const CXType &type)
 class ElispFormatter : public Value::Formatter
 {
 public:
-    virtual void format(const Value &value, std::function<void(const char *, size_t)> output) const
+    virtual void format(const Value &value, std::function<void(const char *, size_t)> output) const override
     {
         switch (value.type()) {
         case Value::Type_Invalid:

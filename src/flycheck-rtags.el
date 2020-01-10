@@ -1,15 +1,15 @@
-;;; flycheck-rtags.el --- RTags Flycheck integration.
+;;; flycheck-rtags.el --- RTags Flycheck integration -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2017 Christian Schwarzgruber
 
 ;; Author: Christian Schwarzgruber <c.schwarzgruber.cs@gmail.com>
-;; URL: http://rtags.net
+;; URL: https://github.com/Andersbakken/rtags
 ;; Version: 0.2
 ;; Package-Requires: ((emacs "24") (flycheck "0.23") (rtags "2.10"))
 
 ;; This file is not part of GNU Emacs.
 
-;; This file is part of RTags (http://rtags.net).
+;; This file is part of RTags (https://github.com/Andersbakken/rtags).
 ;;
 ;; RTags is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 ;; GNU General Public License for more details.
 ;;
 ;; You should have received a copy of the GNU General Public License
-;; along with RTags.  If not, see <http://www.gnu.org/licenses/>.
+;; along with RTags.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 ;; C, C++ and Objective-c support for Flycheck, using rtags.
@@ -58,7 +58,7 @@
   :prefix "flycheck-"
   :group 'flycheck
   :group 'rtags
-  :link '(url-link :tag "Website" "http://rtags.net"))
+  :link '(url-link :tag "Website" "https://github.com/Andersbakken/rtags"))
 
 ;; Shamelessly stolen from flycheck-irony
 (defcustom flycheck-rtags-error-filter 'identity
@@ -106,7 +106,7 @@ CALLBACK is the callback function to call."
     (rtags-diagnostics)
     (funcall callback 'finished (flycheck-rtags--build-error checker buffer))))
 
-(defun flycheck-rtags--verify (checker)
+(defun flycheck-rtags--verify (_checker)
   "Verify the Flycheck RTags syntax CHECKER."
   (list
    (flycheck-verification-result-new

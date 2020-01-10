@@ -5,8 +5,13 @@ DIR="$(dirname $SCRIPT)"
 
 MAJOR=$(echo $1 | awk -F. '{print $1}')
 MINOR=$(echo $1 | awk -F. '{print $2}')
-PROTOCOL=$(echo $1 | awk -F. '{print $3}')
+DATABASE=$(echo $1 | awk -F. '{print $3}')
 TAG="v${MAJOR}.${MINOR}"
+
+if git rev-parse $TAG >/dev/null 2>&1; then
+  echo "$TAG exists"
+  exit 1
+fi
 
 JOBS=$(getconf _NPROCESSORS_ONLN)
 
@@ -35,12 +40,11 @@ fi
 $SED -i""                                                                               \
      -e "s,^set(RTAGS_VERSION_MAJOR [0-9]\+),set(RTAGS_VERSION_MAJOR $MAJOR),"          \
      -e "s,^set(RTAGS_VERSION_MINOR [0-9]\+),set(RTAGS_VERSION_MINOR $MINOR),"          \
-     -e "s,^set(RTAGS_VERSION_DATABASE [0-9]\+),set(RTAGS_VERSION_DATABASE $PROTOCOL)," \
+     -e "s,^set(RTAGS_VERSION_DATABASE [0-9]\+),set(RTAGS_VERSION_DATABASE $DATABASE)," \
      CMakeLists.txt
 $SED -i""                                                                                                                       \
      -e "s,^(defconst rtags-package-version \"[0-9]\+\.[0-9]\+\"),(defconst rtags-package-version \"${MAJOR}.${MINOR}\"),"      \
-     -e "s,^(defconst rtags-protocol-version [0-9]\+),(defconst rtags-protocol-version ${PROTOCOL}),"                            \
-     -e "s,^;; Version: [0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?,;; Version: ${MAJOR}.${MINOR}.${PROTOCOL},"                              \
+     -e "s,^;; Version: [0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?,;; Version: ${MAJOR}.${MINOR}.${DATABASE},"                             \
      src/rtags.el
 
 echo "Generating manpages"
@@ -58,16 +62,4 @@ git commit -m "Bump version to ${MAJOR}.${MINOR}"       \
     man
 git tag -a $TAG -m "RTags release ${MAJOR}.${MINOR}"
 
-# Only push the tag in case the travis build fails.
-# Procedure:
-# - while :
-#     git tag -a $TAG -m "RTags release ${MAJOR}.${MINOR}"
-#     git push https://github.com/Andersbakken/rtags.git refs/tags/$TAG
-#     if build succeeds
-#       git push (push refs to master)
-#       break
-#     else
-#       git tag --delete $TAG
-#       git push --prune https://github.com/Andersbakken/rtags.git refs/tags/$TAG
-#
-git push https://github.com/Andersbakken/rtags.git refs/tags/$TAG
+echo "You can now push the release to github"

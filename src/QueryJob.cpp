@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #include "QueryJob.h"
 
@@ -117,9 +117,9 @@ bool QueryJob::writeRaw(const String &out, Flags<WriteFlag> flags)
 }
 
 bool QueryJob::locationToString(Location location,
-    const std::function<void(LocationPiece, const String &)> &cb,
-    Flags<WriteFlag>
-        writeFlags)
+                                const std::function<void(LocationPiece, const String &)> &cb,
+                                Flags<WriteFlag>
+                                writeFlags)
 {
     if (location.isNull())
         return false;
@@ -164,7 +164,7 @@ bool QueryJob::locationToString(Location location,
                                 cb(Piece_ContainingFunctionName, symbol.symbolName);
                             if (containingFunctionLocation)
                                 cb(Piece_ContainingFunctionLocation,
-                                    symbol.location.toString(locationToStringFlags() & ~Location::ShowContext));
+                                   symbol.location.toString(locationToStringFlags() & ~Location::ShowContext));
                             break;
                         }
                     }
@@ -187,23 +187,23 @@ bool QueryJob::write(Location location, Flags<WriteFlag> flags)
 
     String out;
     if (!locationToString(location,
-            [&out](LocationPiece piece, const String &string) {
-                switch (piece) {
-                case Piece_Location:
-                    break;
-                case Piece_SymbolName:
-                case Piece_Kind:
-                case Piece_Context:
-                    out << '\t';
-                    break;
-                case Piece_ContainingFunctionName:
-                case Piece_ContainingFunctionLocation:
-                    out << "\tfunction: ";
-                    break;
-                }
-                out << string;
-            },
-            flags))
+                          [&out](LocationPiece piece, const String &string) {
+                              switch (piece) {
+                              case Piece_Location:
+                                  break;
+                              case Piece_SymbolName:
+                              case Piece_Kind:
+                              case Piece_Context:
+                                  out << '\t';
+                                  break;
+                              case Piece_ContainingFunctionName:
+                              case Piece_ContainingFunctionLocation:
+                                  out << "\tfunction: ";
+                                  break;
+                              }
+                              out << string;
+                          },
+                          flags))
         return false;
     return write(out, flags);
 }
@@ -219,6 +219,8 @@ bool QueryJob::write(const Symbol &symbol, Flags<WriteFlag> writeFlags)
         toStringFlags |= Symbol::IncludeParents;
     if (queryFlags() & QueryMessage::SymbolInfoIncludeBaseClasses)
         toStringFlags |= Symbol::IncludeBaseClasses;
+    if (queryFlags() & QueryMessage::SymbolInfoIncludeSourceCode)
+        toStringFlags |= Symbol::IncludeSourceCode;
     if (queryFlags() & (QueryMessage::ContainingFunction | QueryMessage::JSON | QueryMessage::Elisp))
         toStringFlags |= Symbol::IncludeContainingFunction;
     if (queryFlags() & (QueryMessage::ContainingFunctionLocation | QueryMessage::JSON | QueryMessage::Elisp))

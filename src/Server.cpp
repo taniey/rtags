@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #include "Server.h"
 #include <rct/ThreadPool.h>
@@ -352,7 +352,7 @@ std::shared_ptr<Project> Server::addProject(const Path &path)
 void Server::onNewConnection(SocketServer *server)
 {
     while (true) {
-        SocketClient::SharedPtr client = server->nextConnection();
+        std::shared_ptr<SocketClient> client = server->nextConnection();
         if (!client) {
             break;
         }
@@ -360,7 +360,7 @@ void Server::onNewConnection(SocketServer *server)
         if (mOptions.maxSocketWriteBufferSize) {
             client->setMaxWriteBufferSize(mOptions.maxSocketWriteBufferSize);
         }
-        conn->setErrorHandler([](const SocketClient::SharedPtr &, Message::MessageError &&error) {
+        conn->setErrorHandler([](const std::shared_ptr<SocketClient> &, Message::MessageError &&error) {
                 if (error.type == Message::Message_VersionError) {
                     ::error("Wrong version marker. You're probably using mismatched versions of rc and rdm");
                 } else {
@@ -1338,8 +1338,6 @@ void Server::listSymbols(const std::shared_ptr<QueryMessage> &query, const std::
 
 void Server::status(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn)
 {
-    conn->client()->setWriteMode(SocketClient::Synchronous);
-
     StatusJob job(query, currentProject());
     const int ret = job.run(conn);
     conn->finish(ret);
@@ -1549,12 +1547,13 @@ void Server::setCurrentProject(const std::shared_ptr<Project> &project)
 std::shared_ptr<Project> Server::projectForQuery(const std::shared_ptr<QueryMessage> &query)
 {
     List<Match> matches;
-    if (query->flags() & QueryMessage::HasLocation)
+    if (query->flags() & QueryMessage::HasLocation) {
         matches << query->location().path();
+    } else if (query->flags() & QueryMessage::HasMatch) {
+        matches << query->match();
+    }
     if (!query->currentFile().isEmpty())
         matches << query->currentFile();
-    if (!(query->flags() & QueryMessage::HasLocation))
-        matches << query->match();
 
     return projectForMatches(matches);
 }

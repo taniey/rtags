@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #ifndef QueryJob_h
 #define QueryJob_h
@@ -111,7 +111,7 @@ private:
     {
     public:
         PathFilter(const Path &p) : pattern(p) {}
-        virtual bool match(uint32_t, const Path &path) const { return path.startsWith(pattern); }
+        virtual bool match(uint32_t, const Path &path) const override { return path.startsWith(pattern); }
 
         const Path pattern;
     };
@@ -119,7 +119,7 @@ private:
     {
     public:
         RegexFilter(const String &str, bool caseInsensitive) : regex(str.ref(), caseInsensitive ? std::regex::icase : std::regex::ECMAScript) {}
-        virtual bool match(uint32_t, const Path &path) const { return std::regex_search(path.constData(), regex); }
+        virtual bool match(uint32_t, const Path &path) const override { return std::regex_search(path.constData(), regex); }
 
         const std::regex regex;
     };
@@ -128,7 +128,7 @@ private:
     {
     public:
         DependencyFilter(uint32_t f, const std::shared_ptr<Project> &p) : fileId(f), project(p) {}
-        virtual bool match(uint32_t f, const Path &) const { return project->dependsOn(fileId, f); }
+        virtual bool match(uint32_t f, const Path &) const override { return project->dependsOn(fileId, f); }
 
         const uint32_t fileId;
         const std::shared_ptr<Project> project;

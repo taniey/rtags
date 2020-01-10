@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #include "Source.h"
 
@@ -99,6 +99,8 @@ static inline Source::Language guessLanguageFromSourceFile(const Path &sourceFil
             return Source::CPlusPlus;
         } else if (!strcmp(suffix, "c")) {
             return Source::C;
+        } else if (!strcmp(suffix, "cu")) {
+            return Source::C;
         } else if (!strcmp(suffix, "M")) {
             return Source::ObjectiveCPlusPlus;
         } else if (!strcmp(suffix, "mm")) {
@@ -183,6 +185,7 @@ static const char *valueArgs[] = {
 };
 
 static const char *blacklist[] = {
+    "--driver-mode=",
     "--param",
     "-M",
     "-MD",
@@ -205,7 +208,7 @@ static const char *blacklist[] = {
     "-fembed-bitcode-marker",
     "-fmodules-validate-once-per-build-session",
     "-fno-delete-null-pointer-checks",
-    "-fno-use-linker-plugin"
+    "-fno-use-linker-plugin",
     "-fno-var-tracking",
     "-fno-var-tracking-assignments",
     "-fno-enforce-eh-specs",
@@ -920,6 +923,12 @@ List<String> Source::toCommandLine(Flags<CommandLineFlag> f, bool *usedPch) cons
         remove = config.value("remove-arguments").split(";").toSet();
     }
 
+    if (!(f & ExcludeDefaultArguments)) {
+        assert(server);
+        for (const auto &arg : server->options().defaultArguments)
+            ret.append(arg);
+    }
+
     for (size_t i=0; i<arguments.size(); ++i) {
         const String &arg = arguments.at(i);
         const bool hasValue = ::hasValue(arg);
@@ -936,11 +945,6 @@ List<String> Source::toCommandLine(Flags<CommandLineFlag> f, bool *usedPch) cons
         } else if (hasValue) {
             ++i;
         }
-    }
-    if (!(f & ExcludeDefaultArguments)) {
-        assert(server);
-        for (const auto &arg : server->options().defaultArguments)
-            ret.append(arg);
     }
 
     if (f & IncludeDefines) {

@@ -1,15 +1,15 @@
-;;; ac-rtags.el --- auto-complete back-end for RTags
+;;; ac-rtags.el --- auto-complete back-end for RTags -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2011-2017  Jan Erik Hanssen and Anders Bakken
 
 ;; Author: Jan Erik Hanssen <jhanssen@gmail.com>
 ;;         Anders Bakken <agbakken@gmail.com>
-;; URL: http://rtags.net
+;; URL: https://github.com/Andersbakken/rtags
 ;; Package-Requires: ((auto-complete "1.4.0") (rtags "2.10"))
 
 ;; This file is not part of GNU Emacs.
 
-;; This file is part of RTags (http://rtags.net).
+;; This file is part of RTags (https://github.com/Andersbakken/rtags).
 ;;
 ;; RTags is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 ;; GNU General Public License for more details.
 ;;
 ;; You should have received a copy of the GNU General Public License
-;; along with RTags.  If not, see <http://www.gnu.org/licenses/>.
+;; along with RTags.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 
@@ -31,14 +31,14 @@
 (require 'rtags)
 
 (require 'auto-complete)
-(eval-when-compile (require 'cl))
+(eval-when-compile (require 'cl-lib))
 
 (defgroup ac-rtags nil
   "Auto completion back-end for RTags."
   :prefix "rtags-"
   :group 'ac
   :group 'rtags
-  :link '(url-link :tag "Website" "http://rtags.net"))
+  :link '(url-link :tag "Website" "https://github.com/Andersbakken/rtags"))
 
 (defconst rtags-location-regx "\\([^:]*\\):\\([0-9]*\\):\\([0-9]*\\)")
 
@@ -119,7 +119,7 @@
            (setq inserttxt (mapconcat 'identity arglist ", "))))
     (apply insertfunc (list (concat "(" inserttxt ")")))))
 
-(defun ac-rtags-action-namespace (origtag)
+(defun ac-rtags-action-namespace (_origtag)
   (insert "::"))
 
 (defun ac-rtags-prefix ()
@@ -140,7 +140,7 @@
 (defun ac-rtags-completions-hook ()
   (ac-start))
 
-(add-hook 'rtags-completions-hook 'ac-rtags-completions-hook)
+(add-hook 'rtags-completions-hook #'ac-rtags-completions-hook)
 
 (ac-define-source rtags
   '((init . ac-rtags-init)

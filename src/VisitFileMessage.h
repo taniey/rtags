@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #ifndef VisitFileMessage_h
 #define VisitFileMessage_h
@@ -31,8 +31,8 @@ public:
     Path project() const { return mProject; }
     Path file() const { return mFile; }
     uint32_t sourceFileId() const { return mSourceFileId; }
-    void encode(Serializer &serializer) const { serializer << mProject << mFile << mSourceFileId; }
-    void decode(Deserializer &deserializer) { deserializer >> mProject >> mFile >> mSourceFileId; }
+    void encode(Serializer &serializer) const override { serializer << mProject << mFile << mSourceFileId; }
+    void decode(Deserializer &deserializer) override { deserializer >> mProject >> mFile >> mSourceFileId; }
 private:
     Path mFile, mProject;
     uint32_t mSourceFileId;

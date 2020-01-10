@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #include "RTags.h"
 #include "Symbol.h"
@@ -32,6 +32,33 @@ static inline const char *linkageSpelling(CXLinkageKind kind)
     case CXLinkage_External: return "Linkage: External";
     }
     return "";
+}
+
+static String sourceCode(const Path &path, int startLine, int startColumn, int endLine, int endColumn)
+{
+    assert(startLine != -1);
+    assert(startColumn != -1);
+    assert(endLine != -1);
+    assert(endColumn != -1);
+    assert(startLine < endLine || (startLine == endLine && startColumn < endColumn));
+    const String source = path.readAll(1024 * 1024);
+    if (source.isEmpty()) {
+        return String();
+    }
+
+    const size_t start = RTags::findOffset(startLine, startColumn, source);
+    if (start == String::npos) {
+        return String();
+    }
+
+    if (endLine == startLine) {
+        return source.mid(start, endColumn - startColumn);
+    }
+    const size_t end = RTags::findOffset(endLine, endColumn, source);
+    if (end == String::npos) {
+        return String();
+    }
+    return source.mid(start, end - start);
 }
 
 String Symbol::toString(const std::shared_ptr<Project> &project,
@@ -186,8 +213,6 @@ String Symbol::toString(const std::shared_ptr<Project> &project,
         }
     }
 
-
-
     if (cursorInfoFlags & IncludeTargets && project && filterPiece("targets")) {
         const auto targets = project->findTargets(*this);
         if (targets.size()) {
@@ -209,6 +234,18 @@ String Symbol::toString(const std::shared_ptr<Project> &project,
             for (const auto &r : references) {
                 ret.append(String::format<128>("    %s\n", r.location.toString(locationToStringFlags).constData()));
             }
+        }
+    }
+
+    if (cursorInfoFlags & IncludeSourceCode && (endLine > startLine || (endLine == startLine && endColumn > startColumn))) {
+        const Path path = location.path();
+        String source = sourceCode(path, startLine, startColumn, endLine, endColumn);
+        if (!source.isEmpty()) {
+            ret.append(String::format<1024>("\nSource code: %s:%d:%d-%d:%d\n",
+                                            path.constData(), startLine, startColumn,
+                                            endLine, endColumn));
+            ret.append(source);
+            ret.append('\n');
         }
     }
 

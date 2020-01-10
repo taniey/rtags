@@ -1,16 +1,16 @@
-;;; helm-rtags.el --- A front-end for rtags
+;;; helm-rtags.el --- A front-end for rtags -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2011-2015  Jan Erik Hanssen and Anders Bakken
 
 ;; Author: Jan Erik Hanssen <jhanssen@gmail.com>
 ;;         Anders Bakken <agbakken@gmail.com>
-;; URL: http://rtags.net
+;; URL: https://github.com/Andersbakken/rtags
 ;; Version: 0.2
 ;; Package-Requires: ((helm "2.0") (rtags "2.10"))
 
 ;; This file is not part of GNU Emacs.
 
-;; This file is part of RTags (http://rtags.net).
+;; This file is part of RTags (https://github.com/Andersbakken/rtags).
 ;;
 ;; RTags is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 ;; GNU General Public License for more details.
 ;;
 ;; You should have received a copy of the GNU General Public License
-;; along with RTags.  If not, see <http://www.gnu.org/licenses/>.
+;; along with RTags.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 

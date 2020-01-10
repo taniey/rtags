@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #include "JobScheduler.h"
 
@@ -114,6 +114,21 @@ void JobScheduler::startJobs()
             << "slots" << slots << "daemonCount" << options.daemonCount << "active daemons" << mActiveDaemonsByProcess.size() << "\n"
             << "daemonSlots" << daemonSlots;
 
+    if (options.jobCount < mActiveByProcess.size()) {
+        List<std::shared_ptr<Node> > nodes;
+        nodes.reserve(mActiveByProcess.size());
+        for (const auto &pair : mActiveByProcess) {
+            nodes.push_back(pair.second);
+        }
+        std::sort(nodes.begin(), nodes.end(), [](const std::shared_ptr<Node> &l, const std::shared_ptr<Node> &r) -> bool {
+            return l->started > r->started;
+        });
+        const size_t c = mActiveByProcess.size() - options.jobCount;
+        for (size_t i=0; i<c; ++i) {
+            debug() << "Killing process" << nodes[i]->started;
+            nodes[i]->process->kill();
+        }
+    }
     std::shared_ptr<Node> node = mPendingJobs.first();
     while (node && (slots || daemonSlots)) {
         const Server::ActiveBufferType type = Server::instance()->activeBufferType(node->job->sourceFileId());

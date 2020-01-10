@@ -1,4 +1,4 @@
-/* This file is part of RTags (http://rtags.net).
+/* This file is part of RTags (https://github.com/Andersbakken/rtags).
 
    RTags is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+   along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 
 #ifndef QUERYMESSAGE_H
 #define QUERYMESSAGE_H
@@ -125,7 +125,9 @@ public:
         CodeCompletionEnabled = (1ull << 44),
         SynchronousDiagnostics = (1ull << 45),
         CodeCompleteNoWait = (1ull << 46),
-        AllTargets = (1ull << 47)
+        SymbolInfoIncludeSourceCode = (1ull << 47),
+        AllTargets = (1ull << 48),
+        HasMatch = (1ull << 29)
     };
 
     QueryMessage(Type type = Invalid);

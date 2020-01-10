@@ -23,7 +23,7 @@
 # Copyright (C) 2011, 2012, 2013 Jan Erik Hanssen and Anders Bakken
 # Copyright (C) 2015 Christian Schwarzgruber <c.schwarzgruber.cs@gmail.com>
 #
-# This file is part of RTags (http://rtags.net).
+# This file is part of RTags (https://github.com/Andersbakken/rtags).
 #
 # RTags is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with RTags.  If not, see <http://www.gnu.org/licenses/>.
+# along with RTags.  If not, see <https://www.gnu.org/licenses/>.
 
 if (NOT LIBCLANG_ROOT_DIR)
     set(LIBCLANG_ROOT_DIR $ENV{LIBCLANG_ROOT_DIR})
@@ -49,23 +49,12 @@ if (NOT LIBCLANG_LLVM_CONFIG_EXECUTABLE)
     endif ()
     if (NOT LIBCLANG_LLVM_CONFIG_EXECUTABLE)
         if (APPLE)
-            foreach(major RANGE 20 3)
-                foreach(minor RANGE 9 0)
-                    foreach(patch RANGE 9 0)
-                        message(STATUS "trying llvm-config llvm-config${major}${minor} in /usr/local/Cellar/llvm/${major}.${minor}.${patch}/bin")
-                        find_program(LIBCLANG_LLVM_CONFIG_EXECUTABLE NAMES llvm-config llvm-config${major}${minor} llvm-config-${major}${minor} llvm-config-${major} llvm-config${major} PATHS /usr/local/Cellar/llvm/${major}.${minor}.${patch}/bin)
-                        if (LIBCLANG_LLVM_CONFIG_EXECUTABLE)
-                            break()
-                        endif ()
-                    endforeach ()
-                    if (LIBCLANG_LLVM_CONFIG_EXECUTABLE)
-                        break()
-                    endif ()
-                endforeach ()
-                if (LIBCLANG_LLVM_CONFIG_EXECUTABLE)
-                    break()
-                endif ()
-            endforeach ()
+            execute_process(COMMAND brew --prefix llvm OUTPUT_VARIABLE BREW_LLVM_PATH RESULT_VARIABLE BREW_LLVM_RESULT)
+            if (NOT ${BREW_LLVM_RESULT} EQUAL 0)
+                set(BREW_LLVM_PATH "/usr/local/opt/llvm")
+            endif ()
+            string(STRIP ${BREW_LLVM_PATH} BREW_LLVM_PATH)
+            find_program(LIBCLANG_LLVM_CONFIG_EXECUTABLE NAMES llvm-config PATHS "${BREW_LLVM_PATH}/bin")
         else ()
             set(llvm_config_names llvm-config)
             foreach(major RANGE 9 3)

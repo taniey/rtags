@@ -5,7 +5,7 @@
 # Author: Christian Schwarzgruber
 # Created: Tue May 10 22:28:28 2016 (+0200)
 #
-# This file is part of RTags (http://rtags.net).
+# This file is part of RTags (https://github.com/Andersbakken/rtags).
 #
 # RTags is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
+# along with RTags.  If not, see <https://www.gnu.org/licenses/>. */
 #
 # Description: The following variables can be changed from the build matrix:
 #  - ASAN        (default value is "1")
@@ -33,14 +33,13 @@ fi
 export CCACHE_DEBUG=1
 function build_and_test()
 {
-    rm -rf build
-    mkdir build && pushd build > /dev/null
-    emacs --version
-    cmake "$1" "${CMAKE_PARAMS[@]}" .. || cat CMakeFiles/CMakeError.log
+    cmake_args=$1; shift
+    mkdir build
+    cd build
+    cmake "$cmake_args" "${CMAKE_PARAMS[@]}" .. || cat CMakeFiles/CMakeError.log
     make VERBOSE=1 -j2
-    shift
-    PATH=$(pwd)/bin:$PATH ctest --output-on-failure --verbose "$@"
-    popd >/dev/null
+    PATH=$PATH:$(pwd)/bin
+    ctest --output-on-failure --verbose "$@"
 }
 
 function add_cmake_params()
@@ -52,12 +51,7 @@ function add_cmake_params()
 
 function osx()
 {
-    ## Step -- Setup
-    pip3 install --user --upgrade nose PyHamcrest
-
-    ## Step -- Build
     mkdir -p ~/.local/bin
-    ln -s /usr/local/Cellar/numpy/*/libexec/nose/bin/nosetests-3.6 ~/.local/bin/nosetests
     export LIBCLANG_LLVM_CONFIG_EXECUTABLE=$(find /usr/local/Cellar/llvm/*/bin -name llvm-config 2>/dev/null)
     # Help cmake to find openssl includes/library
     add_cmake_params "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl"
@@ -68,13 +62,13 @@ function osx()
 
 function gnu_linux()
 {
-    ## Step -- Setup
-    pip3 install --user --upgrade nose PyHamcrest
-
     build_and_test -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
 }
 
+pip3 install --user --upgrade pytest
+
 if [ $TRAVIS_OS_NAME = osx ]; then
+    export PATH=$PATH:$(python3 -c 'import site; print(site.USER_BASE)')/bin
     osx
 else
     gnu_linux
