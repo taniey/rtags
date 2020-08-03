@@ -518,7 +518,7 @@ String cursorToString(CXCursor cursor, const Flags<CursorToStringFlags> flags)
         ret += " def";
 
     if (flags & IncludeUSR) {
-        const String usr = eatString(clang_getCursorUSR(clang_getCanonicalCursor(cursor)));
+        const String usr = RTags::usr(cursor);
         if (!usr.isEmpty()) {
             ret += " " + usr;
         }
@@ -527,7 +527,7 @@ String cursorToString(CXCursor cursor, const Flags<CursorToStringFlags> flags)
     if (flags & IncludeSpecializedUsr) {
         const CXCursor general = clang_getSpecializedCursorTemplate(cursor);
         if (!clang_Cursor_isNull(general)) {
-            const String usr = eatString(clang_getCursorUSR(clang_getCanonicalCursor(general)));
+            const String usr = RTags::usr(general);
             if (!usr.isEmpty()) {
                 ret += " " + usr;
             }
@@ -564,7 +564,16 @@ String cursorToString(CXCursor cursor, const Flags<CursorToStringFlags> flags)
         const char *data = clang_getCString(file);
         if (data && *data) {
             ret += ' ';
-            ret += data;
+            if (flags & RealPathCursorPath) {
+                char buf[PATH_MAX];
+                if (realpath(data, buf)) {
+                    ret += buf;
+                } else {
+                    ret += data;
+                }
+            } else {
+                ret += data;
+            }
             ret += ':';
             ret += String::number(line);
             ret += ':';
@@ -978,6 +987,7 @@ CXCursor findFirstChild(CXCursor parent)
 
 struct FindChildVisitor
 {
+    CXChildVisitResult result;
     CXCursorKind kind;
     String name;
     CXCursor cursor;
@@ -998,20 +1008,20 @@ static CXChildVisitResult findChildVisitor(CXCursor cursor, CXCursor, CXClientDa
             return CXChildVisit_Break;
         }
     }
-    return CXChildVisit_Continue;
+    return u->result;
 }
 
-CXCursor findChild(CXCursor parent, CXCursorKind kind)
+CXCursor findChild(CXCursor parent, CXCursorKind kind, CXChildVisitResult mode)
 {
-    FindChildVisitor u = { kind, String(), clang_getNullCursor() };
+    FindChildVisitor u = { mode, kind, String(), clang_getNullCursor() };
     if (!clang_isInvalid(clang_getCursorKind(parent)))
         clang_visitChildren(parent, findChildVisitor, &u);
     return u.cursor;
 }
 
-CXCursor findChild(CXCursor parent, const String &name)
+CXCursor findChild(CXCursor parent, const String &name, CXChildVisitResult mode)
 {
-    FindChildVisitor u = { CXCursor_FirstInvalid, name, clang_getNullCursor() };
+    FindChildVisitor u = { mode, CXCursor_FirstInvalid, name, clang_getNullCursor() };
     if (!clang_isInvalid(clang_getCursorKind(parent)))
         clang_visitChildren(parent, findChildVisitor, &u);
     return u.cursor;
@@ -1242,4 +1252,38 @@ int cursorArguments(const CXCursor &cursor, List<CXCursor> *args)
     return numArgs;
 }
 
+String usr(const CXCursor &cursor)
+{
+    String str = RTags::eatString(clang_getCursorUSR(clang_getCanonicalCursor(cursor)));
+    size_t idx = 0;
+    while (true) {
+        idx = str.indexOf("<", idx);
+        if (idx == String::npos)
+            break;
+        if (idx > 9 && !strncmp(str.c_str() + idx - 8, "operator", 8) && !std::isalnum(str[idx - 9]) && str[idx - 9] != '_') {
+            idx += 2;
+            continue;
+        }
+        size_t templateIdx = 0;
+        size_t start = ++idx;
+        while (idx < str.size()) {
+            if (str[idx] == '<') {
+                start = ++idx;
+            } else if (str[idx] == ',') {
+                assert(str[idx + 1] == ' ');
+                const String replacement = String::format("T%zu", templateIdx++);
+                const ssize_t diff = replacement.size() - (idx - start);
+                str.replace(start, idx - start, replacement);
+                idx += diff + 2;
+                start = idx;
+            } else if (str[idx] == '>') {
+                str.replace(start, idx - start, String::format("T%zu", templateIdx++));
+                break;
+            } else {
+                ++idx;
+            }
+        }
+    }
+    return str;
+}
 }

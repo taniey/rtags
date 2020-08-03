@@ -99,7 +99,6 @@ std::initializer_list<CommandLineParser::Option<RClient::OptionType> > opts = {
     { RClient::Dependencies, "dependencies", 0, CommandLineParser::Required, "Dump dependencies for source file [(includes, included-by, depends-on, depended-on, tree-depends-on, raw)]." },
     { RClient::AllDependencies, "all-dependencies", 0, CommandLineParser::NoValue, "Dump dependencies for all source files [(includes, included-by, depends-on, depended-on, tree-depends-on, raw)]." },
     { RClient::ReloadFileManager, "reload-file-manager", 'B', CommandLineParser::NoValue, "Reload file manager." },
-    { RClient::Man, "man", 0, CommandLineParser::NoValue, "Output XML for xmltoman to generate man page for rc :-)" },
     { RClient::CodeCompleteAt, "code-complete-at", 'l', CommandLineParser::Required, "Code complete at location: arg is file:line:col." },
     { RClient::SendDiagnostics, "send-diagnostics", 0, CommandLineParser::Required, "Only for debugging. Send data to all -G connections." },
     { RClient::DumpCompletions, "dump-completions", 0, CommandLineParser::NoValue, "Dump cached completions." },
@@ -113,7 +112,7 @@ std::initializer_list<CommandLineParser::Option<RClient::OptionType> > opts = {
     { RClient::DebugLocations, "debug-locations", 0, CommandLineParser::Optional, "Manipulate debug locations." },
     { RClient::Validate, "validate", 0, CommandLineParser::NoValue, "Validate database files for current project." },
     { RClient::Tokens, "tokens", 0, CommandLineParser::Required, "Dump tokens for file. --tokens file.cpp:123-321 for range." },
-    { RClient::DeadFunctions, "find-dead-functions", 0, CommandLineParser::Optional, "Find functions declared/defined in the current file that are never in the project." },
+    { RClient::DeadFunctions, "find-dead-functions", 0, CommandLineParser::Optional, "Find functions declared/defined in the current file that are never used in the project." },
 
     { RClient::None, String(), 0, CommandLineParser::NoValue, "" },
     { RClient::None, String(), 0, CommandLineParser::NoValue, "Command flags:" },
@@ -138,7 +137,7 @@ std::initializer_list<CommandLineParser::Option<RClient::OptionType> > opts = {
     { RClient::MatchRegex, "match-regexp", 'Z', CommandLineParser::NoValue, "Treat various text patterns as regexps (-P, -i, -V, -F)." },
     { RClient::MatchCaseInsensitive, "match-icase", 'I', CommandLineParser::NoValue, "Match case insensitively" },
     { RClient::AbsolutePath, "absolute-path", 'K', CommandLineParser::NoValue, "Print files with absolute path." },
-    { RClient::SocketFile, "socket-file", 'n', CommandLineParser::Required, "Use this socket file (default ~/.rdm)." },
+    { RClient::SocketFile, "socket-file", 'n', CommandLineParser::Required, "Use this socket file (default is XDG_RUNTIME_DIR/rdm.socket else ~/.rdm)" },
     { RClient::SocketAddress, "socket-address", 0, CommandLineParser::Required, "Use this host:port combination (instead of --socket-file)." },
     { RClient::Timeout, "timeout", 'y', CommandLineParser::Required, "Max time in ms to wait for job to finish (default no timeout)." },
     { RClient::FindVirtuals, "find-virtuals", 'k', CommandLineParser::NoValue, "Use in combinations with -R or -r to show other implementations of this function." },
@@ -459,10 +458,6 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
             CommandLineParser::help(stdout, "rc", opts);
             mExitCode = RTags::Success;
             return { String(), CommandLineParser::Parse_Ok } ; }
-        case Man: {
-            CommandLineParser::man(opts);
-            mExitCode = RTags::Success;
-            return { String(), CommandLineParser::Parse_Ok }; }
         case SocketFile: {
             mSocketFile = std::move(value);
             break; }
@@ -890,6 +885,7 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
         case Status: {
             QueryMessage::Type queryType = QueryMessage::Invalid;
             bool resolve = true;
+
             switch (type) {
             case CheckReindex:
                 queryType = QueryMessage::CheckReindex;
@@ -941,7 +937,9 @@ CommandLineParser::ParseStatus RClient::parse(size_t argc, char **argv)
                 Path p(arg);
                 if (resolve && p.exists()) {
                     p.resolve();
-                    addQuery(queryType, std::move(p), QueryMessage::HasLocation);
+                }
+                if (resolve) {
+                    addQuery(queryType, std::move(p));
                 } else {
                     addQuery(queryType, std::move(arg));
                 }

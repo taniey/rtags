@@ -217,7 +217,7 @@ bool Server::init(const Options &options)
             current.chop(1);
             const auto project = mProjects.value(current);
             if (!project) {
-                error() << "Can't restore project" << current;
+                error() << "Can't restore current project" << current;
                 unlink((mOptions.dataDir + ".currentProject").constData());
             } else {
                 setCurrentProject(project);
@@ -1734,9 +1734,16 @@ void Server::deadFunctions(const std::shared_ptr<QueryMessage> &query, const std
                 bool failed = false;
                 const std::shared_ptr<Project> proj = project();
                 auto process = [this, proj, &failed](uint32_t file) {
-                    for (const Symbol &symbol : proj->findDeadFunctions(file)) {
-                        if (!failed && !write(symbol))
-                            failed = true;
+                    for (const auto &pair : proj->findDeadFunctions(file)) {
+                        String out = symbolToString(pair.first);
+                        if (!out.isEmpty()) {
+                            out.chop(1);
+                            out += String::format<32>(" - %zu callers\n", pair.second);
+                            if (!write(out, Unfiltered)) {
+                                failed = true;
+                                break;
+                            }
+                        }
                     }
                 };
                 if (!fileId) {
@@ -1744,7 +1751,7 @@ void Server::deadFunctions(const std::shared_ptr<QueryMessage> &query, const std
                     all.remove([](uint32_t file) { return Location::path(file).isSystem(); });
                     size_t idx = 0;
                     const Path projectPath = proj->path();
-                    for (uint32_t file : proj->dependencies(0, Project::All)) {
+                    for (uint32_t file : all) {
                         if (raw) {
                             Path p = Location::path(file);
                             const char *ch = p.constData();
@@ -2228,7 +2235,7 @@ bool Server::load()
                     fclose(f);
                 }
                 if (remove) {
-                    Path::rm(file);
+                    Path::rmdir(file);
                 }
             }
         }

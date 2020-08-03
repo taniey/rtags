@@ -5,7 +5,7 @@
 ;; Author: Jan Erik Hanssen <jhanssen@gmail.com>
 ;;         Anders Bakken <agbakken@gmail.com>
 ;; Package-Requires: ((emacs "24.3"))
-;; Version: 2.37.130
+;; Version: 2.38.130
 
 ;; URL: https://github.com/Andersbakken/rtags
 ;; This file is not part of GNU Emacs.
@@ -64,8 +64,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Constants
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defconst rtags-protocol-version 129)
-(defconst rtags-package-version "2.37")
+(defconst rtags-protocol-version 128)
+(defconst rtags-package-version "2.38")
 (defconst rtags-popup-available (require 'popup nil t))
 (defconst rtags-supported-major-modes '(c-mode c++-mode objc-mode) "Major modes RTags supports.")
 (defconst rtags-verbose-results-delimiter "------------------------------------------")
@@ -1899,7 +1899,7 @@ instead of file from `current-buffer'.
     (skip-chars-forward " ")
     (let ((prop (get-text-property (point) 'rtags-ref-location)))
       (and prop
-           (cons (format "%s:%d:%d:" (car prop) (cadr prop) (caddr prop))
+           (cons (format "%s:%d:%d:" (car prop) (cadr prop) (cl-caddr prop))
                  (/ (- (point) (point-at-bol)) rtags-tree-indent))))))
 
 (defun rtags-references-tree-collapse-all ()
@@ -2834,21 +2834,27 @@ This includes both declarations and definitions."
           (rtags-call-rc :path fn "-G" "-F" token)
           (rtags-handle-results-buffer token t nil fn 'guess-function-at-point))))))
 
+(defun rtags-looking-at-symbol-char (no-scope)
+  (cond ((looking-at "[0-9A-Za-z_~#]") t)
+        (no-scope nil)
+        ((looking-at "::") t)
+        ((and (looking-at ":") (looking-back ":" nil)) t)
+        (t nil)))
+
 (defun rtags-current-token (&optional no-scope)
   "Return current program identifier under point.
 
 If NO-SCOPE is true do not include scopes \"::\""
   (save-excursion
-    (let ((symbol-chars (concat "[0-9A-Za-z_~#" (if (not no-scope) ":") "]")))
-      (when (looking-at symbol-chars)
-        (while (and (> (point) (point-min)) (looking-at symbol-chars))
-          (backward-char))
-        (when (not (looking-at symbol-chars))
+    (when (rtags-looking-at-symbol-char no-scope)
+      (while (and (> (point) (point-min)) (rtags-looking-at-symbol-char no-scope))
+        (backward-char))
+      (when (not (rtags-looking-at-symbol-char no-scope))
+        (forward-char))
+      (let ((start (point)))
+        (while (rtags-looking-at-symbol-char no-scope)
           (forward-char))
-        (let ((start (point)))
-          (while (looking-at symbol-chars)
-            (forward-char))
-          (buffer-substring-no-properties start (point)))))))
+        (buffer-substring-no-properties start (point))))))
 
 (defun rtags-rename-confirm-text (confirms prevlen)
   (with-temp-buffer
@@ -4002,7 +4008,7 @@ other window instead of the current one."
            (when bookmark
              (bookmark-set bookmark))))
     (if remove
-        (delete-window window)
+        (rtags-delete-rtags-windows)
       (when show
         (select-window window)))))
 
@@ -4108,9 +4114,9 @@ other window instead of the current one."
                                                (split-string (car x) ":" t)))
                              rdblists))
            (sorted (sort sortable (lambda (x y)
-                                    (cond ((= (string-to-number (caddr x)) (string-to-number (caddr y)))
-                                           (< (string-to-number (cadddr x)) (string-to-number (cadddr y))))
-                                          (t (< (string-to-number (caddr x)) (string-to-number (caddr y))))))))
+                                    (cond ((= (string-to-number (cl-caddr x)) (string-to-number (cl-caddr y)))
+                                           (< (string-to-number (cl-cadddr x)) (string-to-number (cl-cadddr y))))
+                                          (t (< (string-to-number (cl-caddr x)) (string-to-number (cl-caddr y))))))))
            ;; Combine location pieces back into a string
            (alists (mapcar (lambda (x) (cons (car x) (mapconcat 'identity (cdr x) ":"))) sorted)))
       ;; Return the sorted pairs of name and location.
@@ -4619,12 +4625,14 @@ definition."
               (lambda (item) (concat "-I" item))
               (funcall rtags-includes-func)) " "))
 
-(defun rtags-command ()
-  "Shell command used to start the `rtags-server' process."
+(defun rtags-rdm-command ()
+  "Shell command used to start the rtags-server process."
   (format "%s %s %s"
           (rtags-executable-find rtags-rdm-binary-name)
           (rtags-rdm-includes)
-          rtags-process-flags))
+          (concat (unless (string= rtags-socket-file "")
+                    (concat "--socket-file " rtags-socket-file ))
+                  rtags-process-flags)))
 
 (defun rtags-cancel-process ()
   "Stop the RTags process."
@@ -4653,8 +4661,10 @@ definition."
            (dolist (pid (reverse (list-system-processes))) ;; Check in the sys-processes for rdm
              (let* ((attrs (process-attributes pid))
                     (pname (cdr (assoc 'comm attrs)))
-                    (uid (cdr (assoc 'euid attrs))))
+                    (uid (cdr (assoc 'euid attrs)))
+                    (args (cdr (assoc 'args attrs))))
                (when (and (eq uid (user-uid))
+                          (string-equal (rtags-rdm-command) args)
                           (or (string-equal pname rtags-rdm-binary-name)
                               (string-equal pname "rdm.exe")))
                  (cl-return t))))))
@@ -4666,7 +4676,7 @@ definition."
        (rtags--error 'rtags-cannot-start-process rtags-server-executable))
       (t
        (let ((process-connection-type (not rtags-rdm-process-use-pipe)))
-         (setq rtags-rdm-process (start-file-process-shell-command "RTags" "*rdm*" (rtags-command))))
+         (setq rtags-rdm-process (start-file-process-shell-command "RTags" "*rdm*" (rtags-rdm-command))))
        (and rtags-autostart-diagnostics (rtags-diagnostics))
        (set-process-query-on-exit-flag rtags-rdm-process nil)
        (set-process-sentinel rtags-rdm-process 'rtags-sentinel)))))

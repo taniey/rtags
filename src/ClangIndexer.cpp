@@ -35,11 +35,6 @@
 #include "VisitFileResponseMessage.h"
 #include "Location.h"
 
-static inline String usr(const CXCursor &cursor)
-{
-    return RTags::eatString(clang_getCursorUSR(clang_getCanonicalCursor(cursor)));
-}
-
 static inline void setType(Symbol &symbol, const CXType &type)
 {
     symbol.type = type.kind;
@@ -1085,7 +1080,7 @@ bool ClangIndexer::handleReference(const CXCursor &cursor, CXCursorKind kind, Lo
         break;
     }
 
-    const String refUsr = usr(ref);
+    const String refUsr = RTags::usr(ref);
     if (refUsr.isEmpty()) {
         return false;
     }
@@ -1111,12 +1106,7 @@ bool ClangIndexer::handleReference(const CXCursor &cursor, CXCursorKind kind, Lo
             reffedCursor = findSymbol(refLoc, &result);
         }
     }
-    int16_t refTargetValue;
-    if (result == Found) {
-        refTargetValue = reffedCursor.targetsValue();
-    } else {
-        refTargetValue = RTags::createTargetsValue(refKind, clang_isCursorDefinition(ref));
-    }
+    const int16_t refTargetValue = RTags::createTargetsValue(refKind, clang_isCursorDefinition(ref));
 
     Symbol *c = &unit(location)->symbols[location];
     assert(c);
@@ -1282,7 +1272,230 @@ bool ClangIndexer::handleReference(const CXCursor &cursor, CXCursorKind kind, Lo
         }
     }
 
+    if (refKind == CXCursor_FunctionDecl && c->symbolName == "make_shared") {
+        handleMakeShared(cursor, targets);
+    }
+
     return true;
+}
+
+
+static inline bool hasDefaultArg(const CXCursor &cursor)
+{
+    static RTags::Filter filterOut;
+    static bool first = true;
+    if (first) {
+        first = false;
+        filterOut.kinds.insert(CXCursor_TypeRef);
+    }
+    return RTags::children(cursor, RTags::Filter(), filterOut).size();
+}
+
+enum MatchTypeResult {
+    Mismatch,
+    Cast,
+    Match
+};
+
+static inline bool compareTypeString(const CXType &argument, const CXType &candidate)
+{
+    String aa = RTags::eatString(clang_getTypeSpelling(argument));
+    while (aa.size() > 0 && (aa[aa.size() - 1] == '&' || aa[aa.size() - 1] == ' '))
+        aa.chop(1);
+    String bb = RTags::eatString(clang_getTypeSpelling(candidate));
+    while (bb.size() > 0 && (bb[bb.size() - 1] == '&' || bb[bb.size() - 1] == ' '))
+        bb.chop(1);
+    if (bb.startsWith("const ") && !aa.startsWith("const ")) {
+        bb.remove(0, 6);
+    }
+
+    return aa == bb;
+}
+
+static MatchTypeResult matchTypes(CXCursor argument, const CXCursor &candidate)
+{
+    CXType atype;
+    if (clang_getCursorKind(argument) == CXCursor_CallExpr) {
+        atype = clang_getCanonicalType(clang_getCursorResultType(clang_getCursorReferenced(argument)));
+    } else {
+        atype = clang_getCanonicalType(clang_getCursorType(argument));
+    }
+    const CXType ctype = clang_getCanonicalType(clang_getCursorType(candidate));
+    if (ctype.kind == CXType_Pointer) {
+        if (atype.kind == CXType_NullPtr)
+            return Match;
+        if (ctype.kind != CXType_Pointer)
+            return Mismatch;
+        if (compareTypeString(atype, ctype))
+            return Match;
+        return Cast;
+    }
+
+    if (atype.kind == CXType_Record) {
+        if (ctype.kind != CXType_Record && ctype.kind != CXType_LValueReference)
+            return Mismatch;
+        // gotta check const
+        if (compareTypeString(atype, ctype))
+            return Match;
+        return Cast;
+    }
+
+    if (ctype.kind == CXType_LValueReference || ctype.kind == CXType_RValueReference) {
+        if (atype.kind != ctype.kind)
+            return Mismatch;
+        if (compareTypeString(clang_getPointeeType(atype), clang_getPointeeType(ctype)))
+            return Match;
+        return Mismatch;
+    }
+
+    if (atype.kind == ctype.kind) {
+        return Match;
+    }
+
+    if (RTags::isNumber(atype.kind) && RTags::isNumber(ctype.kind)) {
+        return Cast;
+    }
+
+    const CXStringScope ascope = clang_getTypeSpelling(atype);
+    const CXStringScope cscope = clang_getTypeSpelling(ctype);
+    if (!strcmp(clang_getCString(ascope), clang_getCString(cscope))) {
+        return Match;
+    }
+
+    // error() << "compared strings" << clang_getCString(ascope) << clang_getCString(cscope);
+    // error() << "a" << atype << "c" << ctype;
+
+    // for (const auto &aa : RTags::children(argument)) {
+    //     error() << "aa" << aa;
+    // }
+
+    // for (const auto &cc : RTags::children(candidate)) {
+    //     error() << "cc" << cc;
+    // }
+
+    // auto cc = RTags::children(candidate);
+    return Mismatch;
+}
+
+void ClangIndexer::handleMakeShared(const CXCursor &cursor, Map<String, uint16_t> &targets)
+{
+    CXCursor ref = clang_getCursorReferenced(cursor);
+    CXCursor p1 = clang_getCursorSemanticParent(ref);
+    CXCursor p2 = clang_getCursorSemanticParent(p1);
+    if (clang_getCursorKind(p1) != CXCursor_Namespace)
+        return;
+    switch (clang_getCursorKind(p2)) {
+    case CXCursor_TranslationUnit:
+        if (RTags::eatString(clang_getCursorSpelling(p1)) != "std")
+            return;
+        break;
+    case CXCursor_Namespace:
+        if (RTags::eatString(clang_getCursorSpelling(p2)) != "std")
+            return;
+        break;
+    default:
+        return;
+    }
+
+    CXCursor call = clang_getNullCursor();
+    for (int i=mParents.size() - 1; i>=0; --i) {
+        if (clang_getCursorKind(mParents[i]) == CXCursor_CallExpr) {
+            call = mParents[i];
+            break;
+        } else if (!i) {
+            error() << "DIDN'T FIND CALL" << cursor;
+            return;
+        }
+    }
+
+    CXType clazzType = clang_Cursor_getTemplateArgumentType(ref, 0);
+    CXCursor clazz = clang_getTypeDeclaration(clazzType);
+    const int refCount = clang_Cursor_getNumArguments(call);
+
+    static RTags::Filter filter;
+    static bool first = true;
+    if (first) {
+        filter.kinds.insert(CXCursor_Constructor);
+        first = false;
+    }
+
+    List<CXCursor> constructors = RTags::children(clazz, filter);
+    List<String> usrs;
+    usrs.reserve(constructors.size());
+    size_t i=0;
+    while (i<constructors.size()) {
+        const CXCursor &cc = constructors[i];
+        String usr = RTags::usr(cc);
+        if (usr.isEmpty()) {
+            constructors.removeAt(i);
+            continue;
+        }
+
+        int count = clang_Cursor_getNumArguments(cc);
+        if (count < refCount) {
+            constructors.removeAt(i);
+            continue;
+        }
+
+        if (count > 0) {
+            for (int ii=0; ii<count; ++ii) {
+                const CXCursor arg = clang_Cursor_getArgument(cc, ii);
+                if (ii == refCount) {
+                    if (!hasDefaultArg(arg)) {
+                        count = -1;
+                    }
+                    break;
+                }
+            }
+            if (count == -1) {
+                constructors.removeAt(i);
+                continue;
+            }
+        }
+        usrs.append(std::move(usr));
+        ++i;
+    }
+
+    assert(constructors.size() == usrs.size());
+    if (constructors.size() == 1) {
+        const int16_t refTargetValue = RTags::createTargetsValue(CXCursor_Constructor, clang_isCursorDefinition(constructors[0]));
+        targets[usrs[0]] = refTargetValue;
+    } else if (!constructors.isEmpty()) {
+        List<std::pair<size_t, MatchTypeResult> > matched;
+        matched.reserve(constructors.size());
+        bool hasMatch = false;
+        for (size_t ci=0; ci<constructors.size(); ++ci) {
+            const CXCursor &cc = constructors[ci];
+            MatchTypeResult res = Match;
+            for (int ii=0; ii<refCount; ++ii) {
+                const MatchTypeResult m = matchTypes(clang_Cursor_getArgument(call, ii), clang_Cursor_getArgument(cc, ii));
+                if (m == Mismatch) {
+                    res = m;
+                    break;
+                } else if (m == Cast) {
+                    res = Cast;
+                }
+            }
+            if (res != Mismatch) {
+                matched.append(std::make_pair(ci, res));
+                if (res == Match)
+                    hasMatch = true;
+            }
+        }
+        if (matched.size() == 0) {
+            for (size_t matchIdx = 0; matchIdx<constructors.size(); ++matchIdx) {
+                const int16_t refTargetValue = RTags::createTargetsValue(CXCursor_Constructor, clang_isCursorDefinition(constructors[matchIdx]));
+                targets[usrs[matchIdx]] = refTargetValue;
+            }
+        } else {
+            for (std::pair<size_t, MatchTypeResult> match : matched) {
+                if (hasMatch && match.second == Cast)
+                    continue;
+                const int16_t refTargetValue = RTags::createTargetsValue(CXCursor_Constructor, clang_isCursorDefinition(constructors[match.first]));
+                targets[usrs[match.first]] = refTargetValue;
+            }
+        }
+    }
 }
 
 std::unordered_set<CXCursor> ClangIndexer::addOverriddenCursors(const CXCursor &c, Location location)
@@ -1300,7 +1513,7 @@ std::unordered_set<CXCursor> ClangIndexer::addOverriddenCursors(const CXCursor &
 
                 const CXCursor resolved = resolveTemplate(overridden[i]);
                 ret.insert(resolved);
-                const String usr = ::usr(resolved);
+                const String usr = RTags::usr(resolved);
                 assert(!usr.isEmpty());
                 // assert(!locCursor.usr.isEmpty());
 
@@ -1529,7 +1742,7 @@ void ClangIndexer::handleBaseClassSpecifier(const CXCursor &cursor)
             ref = std::move(tmp);
         }
     }
-    const String usr = ::usr(ref);
+    const String usr = RTags::usr(ref);
     if (usr.isEmpty()) {
         warning() << "Couldn't find usr for" << clang_getCursorReferenced(cursor) << cursor << mLastClass;
         return;
@@ -1561,7 +1774,7 @@ CXChildVisitResult ClangIndexer::handleCursor(const CXCursor &cursor, CXCursorKi
                                               Location location, Symbol **cursorPtr)
 {
     auto tu = mTranslationUnits.at(mCurrentTranslationUnit)->unit;
-    const String usr = ::usr(cursor);
+    const String usr = RTags::usr(cursor);
     // error() << "Got a cursor" << cursor;
     Symbol &c = unit(location)->symbols[location];
     if (cursorPtr)
@@ -1659,7 +1872,7 @@ CXChildVisitResult ClangIndexer::handleCursor(const CXCursor &cursor, CXCursorKi
             case CXCursor_ClassTemplate: {
                 const CXCursor destructor = RTags::findChild(referenced, CXCursor_Destructor);
                 if (RTags::isValid(destructor)) {
-                    const String destructorUsr = ::usr(destructor);
+                    const String destructorUsr = RTags::usr(destructor);
                     assert(!destructorUsr.isEmpty());
                     const Location scopeEndLocation = mScopeStack.back().end;
                     auto u = unit(scopeEndLocation);
@@ -1771,17 +1984,20 @@ CXChildVisitResult ClangIndexer::handleCursor(const CXCursor &cursor, CXCursorKi
         && c.type != CXType_RValueReference
         && c.type != CXType_Auto
         && c.type != CXType_Unexposed) {
-        c.size = std::max<uint16_t>(0, clang_Type_getSizeOf(type));
-        c.alignment = std::max<int16_t>(-1, clang_Type_getAlignOf(type));
-        if (c.size > 0 && (kind == CXCursor_VarDecl || kind == CXCursor_ParmDecl)) {
-            for (int i=mScopeStack.size() - 1; i>=0; --i) {
-                auto &scope = mScopeStack.at(i);
-                if (scope.type == Scope::FunctionDefinition) {
-                    assert(scope.symbol);
-                    scope.symbol->stackCost += c.size;
-                    break;
-                } else if (scope.type == Scope::FunctionDeclaration) {
-                    break;
+        const long long ret = clang_Type_getSizeOf(type);
+        if (ret > 0) {
+            c.size = static_cast<uint16_t>(ret);
+            c.alignment = std::max<int16_t>(-1, clang_Type_getAlignOf(type));
+            if (c.size > 0 && (kind == CXCursor_VarDecl || kind == CXCursor_ParmDecl)) {
+                for (int i=mScopeStack.size() - 1; i>=0; --i) {
+                    auto &scope = mScopeStack.at(i);
+                    if (scope.type == Scope::FunctionDefinition) {
+                        assert(scope.symbol);
+                        scope.symbol->stackCost += c.size;
+                        break;
+                    } else if (scope.type == Scope::FunctionDeclaration) {
+                        break;
+                    }
                 }
             }
         }
@@ -1877,15 +2093,15 @@ CXChildVisitResult ClangIndexer::handleCursor(const CXCursor &cursor, CXCursorKi
         }
 
         // these are for joining constructors/destructor with their classes (for renaming symbols)
-        assert(!::usr(parent).isEmpty());
-        unit(location)->targets[location][::usr(parent)] = 0;
+        assert(!RTags::usr(parent).isEmpty());
+        unit(location)->targets[location][RTags::usr(parent)] = 0;
         break; }
     case CXCursor_ClassTemplate:
     case CXCursor_StructDecl:
     case CXCursor_ClassDecl: {
         const CXCursor specialization = clang_getSpecializedCursorTemplate(cursor);
         if (RTags::isValid(specialization)) {
-            unit(location)->targets[location][::usr(specialization)] = 0;
+            unit(location)->targets[location][RTags::usr(specialization)] = 0;
             c.flags |= Symbol::TemplateSpecialization;
         }
         break; }
@@ -1915,8 +2131,8 @@ CXChildVisitResult ClangIndexer::handleCursor(const CXCursor &cursor, CXCursorKi
     if (RTags::isFunction(c.kind)) {
         const bool definition = c.flags & Symbol::Definition;
         mScopeStack.append({definition ? Scope::FunctionDefinition : Scope::FunctionDeclaration, definition ? &c : nullptr,
-                Location(location.fileId(), c.startLine, c.startColumn),
-                Location(location.fileId(), c.endLine, c.endColumn - 1)});
+                            Location(location.fileId(), c.startLine, c.startColumn),
+                            Location(location.fileId(), c.endLine, c.endColumn - 1)});
         bool isTemplateFunction = c.kind == CXCursor_FunctionTemplate;
         if (!isTemplateFunction  && (c.kind == CXCursor_CXXMethod
                                      || c.kind == CXCursor_Constructor
@@ -2330,7 +2546,7 @@ bool ClangIndexer::visit()
             bool ignored;
             const Location loc = createLocation(cursor, kind, &ignored);
             if (!loc.isNull()) {
-                const String refUsr = usr(resolveTemplateUsr(resolveTemplate(ref)));
+                const String refUsr = RTags::usr(resolveTemplateUsr(resolveTemplate(ref)));
                 if (!refUsr.isEmpty()) {
                     assert(!refUsr.isEmpty());
                     const uint32_t fileId = mSources.front().fileId;

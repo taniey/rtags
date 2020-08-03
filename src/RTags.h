@@ -137,13 +137,14 @@ void initMessages();
 
 String eatString(CXString str);
 enum CursorToStringFlags {
-    NoCursorToStringFlags = 0x0,
-    IncludeUSR = 0x1,
-    IncludeRange = 0x2,
+    NoCursorToStringFlags = 0x00,
+    IncludeUSR = 0x01,
+    IncludeRange = 0x02,
     DefaultCursorToStringFlags = IncludeRange,
-    IncludeSpecializedUsr = 0x4,
-    IncludeStructSizeof = 0x8,
-    AllCursorToStringFlags = IncludeUSR|IncludeRange|IncludeSpecializedUsr|IncludeStructSizeof
+    IncludeSpecializedUsr = 0x04,
+    IncludeStructSizeof = 0x08,
+    RealPathCursorPath = 0x10,
+    AllCursorToStringFlags = IncludeUSR|IncludeRange|IncludeSpecializedUsr|IncludeStructSizeof|RealPathCursorPath
 };
 RCT_FLAGS(CursorToStringFlags);
 String cursorToString(CXCursor cursor, Flags<CursorToStringFlags> = DefaultCursorToStringFlags);
@@ -334,6 +335,8 @@ bool resolveAuto(const CXCursor &cursor, Auto *a = nullptr);
 
 int cursorArguments(const CXCursor &cursor, List<CXCursor> *args = nullptr);
 
+String usr(const CXCursor &cursor);
+
 struct Filter
 {
     enum Mode {
@@ -393,8 +396,8 @@ struct Filter
 };
 
 CXCursor findFirstChild(CXCursor parent);
-CXCursor findChild(CXCursor parent, CXCursorKind kind);
-CXCursor findChild(CXCursor parent, const String &name);
+CXCursor findChild(CXCursor parent, CXCursorKind kind, CXChildVisitResult mode = CXChildVisit_Recurse);
+CXCursor findChild(CXCursor parent, const String &name, CXChildVisitResult mode = CXChildVisit_Recurse);
 List<CXCursor> findChain(CXCursor parent, const List<CXCursorKind> &kinds);
 List<CXCursor> children(CXCursor parent, const Filter &in = Filter(), const Filter &out = Filter());
 
@@ -561,6 +564,37 @@ inline bool needsQualifiers(CXCursorKind kind)
     case CXCursor_EnumConstantDecl:
     case CXCursor_EnumDecl:
     case CXCursor_TypedefDecl:
+        return true;
+    default:
+        break;
+    }
+    return false;
+}
+
+inline bool isNumber(CXTypeKind kind)
+{
+    switch (kind) {
+    case CXType_Bool:
+    case CXType_Char_U:
+    case CXType_UChar:
+    case CXType_Char16:
+    case CXType_Char32:
+    case CXType_UShort:
+    case CXType_UInt:
+    case CXType_ULong:
+    case CXType_ULongLong:
+    case CXType_UInt128:
+    case CXType_Char_S:
+    case CXType_SChar:
+    case CXType_WChar:
+    case CXType_Short:
+    case CXType_Int:
+    case CXType_Long:
+    case CXType_LongLong:
+    case CXType_Int128:
+    case CXType_Float:
+    case CXType_Double:
+    case CXType_LongDouble:
         return true;
     default:
         break;
@@ -1093,7 +1127,7 @@ inline Log operator<<(Log dbg, CXCursorKind kind)
 
 inline Log operator<<(Log dbg, CXTypeKind kind)
 {
-    dbg << RTags::eatString(clang_getTypeKindSpelling(kind));
+    dbg << static_cast<int>(kind) << RTags::eatString(clang_getTypeKindSpelling(kind));
     return dbg;
 }
 

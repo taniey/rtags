@@ -104,6 +104,11 @@ CXChildVisitResult ClangThread::visit(const CXCursor &cursor)
                 }
             };
 
+            const int argCount = clang_Cursor_getNumArguments(cursor);
+            if (argCount != -1) {
+                message.append(String::format("arg count: %d ", argCount));
+            }
+
             CXCursor ref = clang_getCursorReferenced(cursor);
             bool refSpecialized = false;
             if (RTags::isValid(ref) && ref != cursor) {
@@ -122,11 +127,14 @@ CXChildVisitResult ClangThread::visit(const CXCursor &cursor)
             }
         }
     }
-    ++mIndentLevel;
-    clang_visitChildren(cursor, ClangThread::visitor, this);
-    if (isAborted())
-        return CXChildVisit_Break;
-    --mIndentLevel;
+    const String usr = RTags::usr(cursor);
+    if (usr.isEmpty() || mSeen.insert(usr)) {
+        ++mIndentLevel;
+        clang_visitChildren(cursor, ClangThread::visitor, this);
+        if (isAborted())
+            return CXChildVisit_Break;
+        --mIndentLevel;
+    }
     return CXChildVisit_Continue;
 }
 
