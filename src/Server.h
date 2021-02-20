@@ -16,6 +16,13 @@
 #ifndef Server_h
 #define Server_h
 
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <functional>
+#include <memory>
+#include <utility>
+
 #include "IndexMessage.h"
 #include "rct/Flags.h"
 #include "rct/Hash.h"
@@ -25,10 +32,18 @@
 #include "rct/Thread.h"
 #include "Source.h"
 #include "RTags.h"
+#include "rct/Path.h"
+#include "rct/Set.h"
+#include "rct/SignalSlot.h"
+
+class IndexMessage;
+class SocketServer;
+struct SourceCache;
 #ifdef OS_Darwin
 #include <Availability.h>
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
 #include <launch.h>
+
 #define RTAGS_HAS_LAUNCHD
 #endif
 #endif
@@ -46,6 +61,7 @@ class QueryMessage;
 class VisitFileMessage;
 class JobScheduler;
 class IndexParseData;
+
 class Server
 {
 public:
@@ -176,6 +192,8 @@ private:
         Clear_KeepFileIds
     };
     void clearProjects(ClearMode mode);
+
+    // handlers
     void handleIndexMessage(const std::shared_ptr<IndexMessage> &message, const std::shared_ptr<Connection> &conn);
     void handleIndexDataMessage(const std::shared_ptr<IndexDataMessage> &message, const std::shared_ptr<Connection> &conn);
     void handleQueryMessage(const std::shared_ptr<QueryMessage> &message, const std::shared_ptr<Connection> &conn);
@@ -183,27 +201,28 @@ private:
     void handleVisitFileMessage(const std::shared_ptr<VisitFileMessage> &message, const std::shared_ptr<Connection> &conn);
 
     // Queries
-    void sendDiagnostics(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void classHierarchy(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void clearProjects(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void deadFunctions(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void codeCompleteAt(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void symbolInfo(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void deadFunctions(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void debugLocations(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void dependencies(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void includePath(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void startClangThread(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void dumpFileMaps(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void diagnose(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void generateTest(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void dumpCompileCommands(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void dumpCompletions(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void dumpFileMaps(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void findFile(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void findSymbols(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void fixIts(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void followLocation(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void generateTest(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void hasFileManager(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void includeFile(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void includePath(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void isIndexed(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void isIndexing(const std::shared_ptr<QueryMessage> &, const std::shared_ptr<Connection> &conn);
-    void lastIndexed(const std::shared_ptr<QueryMessage> &, const std::shared_ptr<Connection> &conn);
     void jobCount(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void lastIndexed(const std::shared_ptr<QueryMessage> &, const std::shared_ptr<Connection> &conn);
     void listSymbols(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void preprocessFile(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void project(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
@@ -213,14 +232,13 @@ private:
     void reloadFileManager(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void removeFile(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void removeProject(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void sendDiagnostics(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void setBuffers(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void sources(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void dumpCompletions(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void dumpCompileCommands(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void startClangThread(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void status(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void suspend(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void setBuffers(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void classHierarchy(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
-    void debugLocations(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
+    void symbolInfo(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void tokens(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
     void validate(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Connection> &conn);
 

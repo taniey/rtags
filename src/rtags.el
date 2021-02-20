@@ -5,7 +5,7 @@
 ;; Author: Jan Erik Hanssen <jhanssen@gmail.com>
 ;;         Anders Bakken <agbakken@gmail.com>
 ;; Package-Requires: ((emacs "24.3"))
-;; Version: 2.38.130
+;; Version: 2.41.133
 
 ;; URL: https://github.com/Andersbakken/rtags
 ;; This file is not part of GNU Emacs.
@@ -65,7 +65,7 @@
 ;; Constants
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defconst rtags-protocol-version 128)
-(defconst rtags-package-version "2.38")
+(defconst rtags-package-version "2.41")
 (defconst rtags-popup-available (require 'popup nil t))
 (defconst rtags-supported-major-modes '(c-mode c++-mode objc-mode) "Major modes RTags supports.")
 (defconst rtags-verbose-results-delimiter "------------------------------------------")
@@ -416,7 +416,7 @@ appropriate format string for `error'. For example,
   :type 'boolean
   :safe 'booleanp)
 
-(defcustom rtags-display-current-error-as-tooltip nil
+(defcustom rtags-display-current-error-as-tooltip rtags-popup-available
   "Display error under cursor using `popup-tip' (requires 'popup)."
   :type 'boolean
   :safe 'booleanp)
@@ -426,7 +426,7 @@ appropriate format string for `error'. For example,
   :type 'boolean
   :safe 'booleanp)
 
-(defcustom rtags-tooltips-enabled (and rtags-popup-available t)
+(defcustom rtags-tooltips-enabled rtags-popup-available
   "Display help / summary text when hovering over symbols."
   :type 'boolean
   :safe 'booleanp)
@@ -1006,11 +1006,12 @@ to case differences."
      nil)))
 
 (defun rtags-reset-bookmarks ()
+  (interactive)
   (setq rtags-buffer-bookmarks 0)
   (let ((bookmark-save-flag t))
-    (mapcar (lambda (bookmark)
-              (when (string-match "^RTags_" bookmark) (bookmark-delete bookmark)))
-            (rtags-bookmark-all-names))))
+    (mapc (lambda (bookmark)
+            (when (string-match "^RTags_" bookmark) (bookmark-delete bookmark)))
+          (rtags-bookmark-all-names))))
 
 ;;;###autoload
 (defun rtags-next-match () (interactive) (rtags-next-prev-match 1 nil))
@@ -2036,7 +2037,9 @@ instead of file from `current-buffer'.
         (ret t)
         (loc (local-variable-p enable-multibyte-characters)))
     (when multibyte
-      (set-buffer-multibyte nil))
+      (save-restriction
+        (widen)
+        (set-buffer-multibyte nil)))
     (goto-char (point-min))
     (condition-case nil
         (progn
@@ -2046,7 +2049,9 @@ instead of file from `current-buffer'.
        (setq ret nil)
        (goto-char old)))
     (when multibyte
-      (set-buffer-multibyte prev))
+      (save-restriction
+        (widen)
+        (set-buffer-multibyte prev)))
     (unless loc
       (kill-local-variable enable-multibyte-characters))
     ret))
@@ -2338,9 +2343,13 @@ instead of file from `current-buffer'.
   (if (rtags-buffer-is-multibyte)
       (let ((prev (buffer-local-value enable-multibyte-characters (current-buffer)))
             (loc (local-variable-p enable-multibyte-characters)))
-        (set-buffer-multibyte nil)
+        (save-restriction
+          (widen)
+          (set-buffer-multibyte nil))
         (goto-char (1+ pos))
-        (set-buffer-multibyte prev)
+        (save-restriction
+          (widen)
+          (set-buffer-multibyte prev))
         (unless loc
           (kill-local-variable enable-multibyte-characters)))
     (goto-char (1+ pos))))

@@ -15,11 +15,27 @@
 
 #include "Source.h"
 
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <unistd.h>
+#include <functional>
+#include <initializer_list>
+#include <set>
+#include <utility>
+#include <vector>
+
 #include "Location.h"
-#include "rct/EventLoop.h"
 #include "rct/Process.h"
 #include "RTags.h"
 #include "Server.h"
+#include "Sandbox.h"
+#include "rct/Hash.h"
+#include "rct/Map.h"
 
 void Source::clear()
 {
@@ -957,35 +973,35 @@ List<String> Source::toCommandLine(Flags<CommandLineFlag> f, bool *usedPch) cons
                     ret += def.toString(f);
         }
     }
-    if (f & IncludeIncludePaths) {
-        for (const auto &inc : includePaths) {
-            switch (inc.type) {
-            case Include::Type_None: assert(0 && "Impossible impossibility"); break;
-#define DECLARE_INCLUDE_TYPE(type, argument, space)                 \
-                case Source::Include::type:                         \
-                    if (inc.type == Include::Type_PCH) {            \
-                        if (f & PCHEnabled) {                       \
-                            if (usedPch)                            \
-                                *usedPch = true;                    \
-                            ret << argument << (inc.path + ".gch"); \
-                        }                                           \
-                    } else if (*space) {                            \
-                        ret << argument << inc.path;                \
-                    } else {                                        \
-                        ret << (argument + inc.path);               \
-                    }                                               \
-                    break;
-#include "IncludeTypesInternal.h"
-            }
-        }
-    }
+#define DECLARE_INCLUDE_TYPE(type, argument, space)     \
+    case Source::Include::type:                         \
+        if (inc.type == Include::Type_PCH) {            \
+            if (f & PCHEnabled) {                       \
+                if (usedPch)                            \
+                    *usedPch = true;                    \
+                ret << argument << (inc.path + ".gch"); \
+            }                                           \
+        } else if (*space) {                            \
+            ret << argument << inc.path;                \
+        } else {                                        \
+            ret << (argument + inc.path);               \
+        }                                               \
+        break;
+
     if (!(f & ExcludeDefaultIncludePaths)) {
         assert(server);
         for (const auto &inc : server->options().includePaths) {
             switch (inc.type) {
             case Include::Type_None: assert(0 && "Impossible impossibility"); break;
 #include "IncludeTypesInternal.h"
-#undef DECLARE_INCLUDE_TYPE
+            }
+        }
+    }
+    if (f & IncludeIncludePaths) {
+        for (const auto &inc : includePaths) {
+            switch (inc.type) {
+            case Include::Type_None: assert(0 && "Impossible impossibility"); break;
+#include "IncludeTypesInternal.h"
             }
         }
     }

@@ -15,13 +15,20 @@
 
 #include "IndexerJob.h"
 
+#include <limits.h>
+#include <string.h>
+#include <map>
+#include <unordered_map>
+#include <utility>
+
 #include "CompilerManager.h"
 #include "Project.h"
-#include "rct/Process.h"
-#include "JobScheduler.h"
 #include "RTags.h"
 #include "Server.h"
 #include "RTagsVersion.h"
+#include "Location.h"
+#include "rct/List.h"
+#include "rct/Serializer.h"
 
 uint64_t IndexerJob::sNextId = 1;
 IndexerJob::IndexerJob(const SourceList &s,
@@ -144,10 +151,7 @@ String IndexerJob::encode() const
             }
 
             Server::instance()->filterBlockedArguments(copy);
-
-            for (const auto &inc : options.includePaths) {
-                copy.includePaths << inc;
-            }
+            copy.includePaths.insert(copy.includePaths.begin(), options.includePaths.begin(), options.includePaths.end());
             if (Server::instance()->options().options & Server::PCHEnabled)
                 proj->fixPCH(copy);
 

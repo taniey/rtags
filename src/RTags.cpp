@@ -16,9 +16,14 @@
 #include "RTags.h"
 
 #include <dirent.h>
-#include <fcntl.h>
 #include <fnmatch.h>
-#include <sys/types.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <map>
+#include <unordered_map>
 #if defined(OS_FreeBSD) || defined(OS_DragonFly)
 #include <sys/sysctl.h>
 #endif
@@ -30,15 +35,16 @@
 #include "LogOutputMessage.h"
 #include "QueryMessage.h"
 #include "rct/Rct.h"
-#include "rct/Connection.h"
-#include "rct/StopWatch.h"
-#include "Server.h"
-#include "ClangIndexer.h"
-#include "Project.h"
 #include "VisitFileMessage.h"
 #include "VisitFileResponseMessage.h"
 #include "RTagsVersion.h"
-#include <clang-c/CXCompilationDatabase.h>
+#include "Diagnostic.h"
+#include "IndexMessage.h"
+#include "Sandbox.h"
+#include "clang-c/CXErrorCode.h"
+#include "clang-c/Index.h"
+#include "rct/Date.h"
+#include "rct/Message.h"
 
 namespace RTags {
 String versionString()
@@ -717,6 +723,26 @@ static inline Diagnostic::Flag convertDiagnosticType(CXDiagnosticSeverity sev)
     return type;
 }
 
+static inline int fixitFileId(const Location &loc)
+{
+    if (!loc.fileId())
+        return 0;
+
+    const Path path = loc.path();
+    if (path.isSystem())
+        return 0;
+
+    // we keep getting fixits for xmmintrin.h, this solves the issue
+    // when it isn't a "system header" ideally we would identify
+    // system headers in a different way I guess
+    const char *fn = path.fileName();
+    assert(fn);
+    if (!strcmp(fn, "xmmintrin.h") || !strcmp(fn, "emmintrin.h")) {
+        return 0;
+    }
+    return loc.fileId();
+}
+
 void DiagnosticsProvider::diagnose()
 {
     const uint32_t sourceFile = sourceFileId();
@@ -801,7 +827,7 @@ void DiagnosticsProvider::diagnose()
         for (size_t j=0; j<diagCount; ++j) {
             CXDiagnostic diag = diagnostic(u, j);
             const CXSourceLocation diagLoc = clang_getDiagnosticLocation(diag);
-            const uint32_t fileId = createLocation(diagLoc, nullptr).fileId();
+            const uint32_t fileId = fixitFileId(createLocation(diagLoc, nullptr));
             if (!fileId) {
                 clang_disposeDiagnostic(diag);
                 // error() << "Couldn't get location for diagnostics" << clang_getCursor(tu, diagLoc) << fileId << mSource.fileId
